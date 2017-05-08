@@ -1,13 +1,13 @@
-import distutils.core
+import setuptools
 from distutils.command.sdist import sdist as _sdist
 import subprocess
 import time
 
-VERSION='0.1.0'
+VERSION='1.2.0'
 RELEASE='0'
 
 class sdist(_sdist):
-    ''' custom sdist command, to prep pyiso.spec file for inclusion '''
+    ''' custom sdist command, to prep pycdlib.spec file for inclusion '''
 
     def run(self):
         global VERSION
@@ -20,9 +20,9 @@ class sdist(_sdist):
         date = time.strftime("%Y%m%d%H%M%S", time.gmtime())
         git_release = "%sgit%s" % (date, git_head)
 
-        # Expand macros in pyiso.spec.in and create pyiso.spec
-        spec_in = open('pyiso.spec.in', 'r')
-        spec = open('pyiso.spec', 'w')
+        # Expand macros in pycdlib.spec.in and create pycdlib.spec
+        spec_in = open('python-pycdlib.spec.in', 'r')
+        spec = open('python-pycdlib.spec', 'w')
         for line in spec_in.xreadlines():
             if "@VERSION@" in line:
                 line = line.replace("@VERSION@", VERSION)
@@ -38,25 +38,25 @@ class sdist(_sdist):
         # Run parent constructor
         _sdist.run(self)
 
-distutils.core.setup(name='pyiso',
-                     version=VERSION,
-                     description='Pure python ISO manipulation library',
-                     url='http://github.com/clalancette/pyiso',
-                     author='Chris Lalancette',
-                     author_email='clalancette@gmail.com',
-                     license='LGPLv2',
-                     classifiers=['Development Status :: 4 - Beta',
-                                  'Intended Audience :: Developers',
-                                  'License :: OSI Approved :: GNU Lesser General Public License v2 (LGPLv2)',
-                                  'Natural Language :: English',
-                                  'Programming Language :: Python :: 2',
-                     ],
-                     keywords='iso9660 iso ecma119 rockridge joliet eltorito',
-                     packages=['pyiso'],
-                     package_dir={'': 'src'},
-                     requires=['pysendfile'],
-                     package_data={},
-                     cmdclass={'sdist': sdist},
-                     data_files=[],
-                     scripts=['tools/pyiso-compare', 'tools/pyiso-explorer'],
+setuptools.setup(name='pycdlib',
+                 version=VERSION,
+                 description='Pure python ISO manipulation library',
+                 url='http://github.com/clalancette/pycdlib',
+                 author='Chris Lalancette',
+                 author_email='clalancette@gmail.com',
+                 license='LGPLv2',
+                 classifiers=['Development Status :: 4 - Beta',
+                              'Intended Audience :: Developers',
+                              'License :: OSI Approved :: GNU Lesser General Public License v2 (LGPLv2)',
+                              'Natural Language :: English',
+                              'Programming Language :: Python :: 2.7',
+                              'Programming Language :: Python :: 3.4',
+                 ],
+                 keywords='iso9660 iso ecma119 rockridge joliet eltorito',
+                 packages=['pycdlib'],
+                 requires=['pysendfile'],
+                 package_data={'': ['examples/*.py']},
+                 cmdclass={'sdist': sdist},
+                 data_files=[('share/man/man1', ['man/pycdlib-explorer.1', 'man/pycdlib-compare.1'])],
+                 scripts=['tools/pycdlib-compare', 'tools/pycdlib-explorer'],
 )

@@ -18,10 +18,12 @@
 Classes and utilities for ISO date support.
 '''
 
+from __future__ import absolute_import
+
 import struct
 import time
 
-import pyisoexception
+import pycdlib.pycdlibexception as pycdlibexception
 
 def gmtoffset_from_tm(tm, local):
     '''
@@ -45,9 +47,9 @@ def gmtoffset_from_tm(tm, local):
     else:
         if tmpyear > 0:
             tmpyday = 1
-    return -(tmpmin + 60 * (tmphour + 24 * tmpyday)) / 15
+    return -(tmpmin + 60 * (tmphour + 24 * tmpyday)) // 15
 
-class ISODate(object):
+class InterfaceISODate(object):
     '''
     An interface class for Ecma-119 dates.  This is here to ensure that both
     the VolumeDescriptorDate class and the DirectoryRecordDate class implement
@@ -90,7 +92,7 @@ class ISODate(object):
         '''
         raise NotImplementedError("New not yet implemented")
 
-class DirectoryRecordDate(ISODate):
+class DirectoryRecordDate(InterfaceISODate):
     '''
     A class to represent a Directory Record date as described in Ecma-119
     section 9.1.5.  The Directory Record date consists of the number of years
@@ -114,11 +116,11 @@ class DirectoryRecordDate(ISODate):
          Nothing.
         '''
         if self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record Date already initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record Date already initialized")
 
         (self.years_since_1900, self.month, self.day_of_month, self.hour,
          self.minute, self.second,
-         self.gmtoffset) = struct.unpack(self.fmt, datestr)
+         self.gmtoffset) = struct.unpack_from(self.fmt, datestr, 0)
 
         self.initialized = True
 
@@ -132,10 +134,10 @@ class DirectoryRecordDate(ISODate):
          Nothing.
         '''
         if self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record Date already initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record Date already initialized")
 
         if tm is not None:
-            raise pyisoexception.PyIsoException("Directory Record Date does not support passing tm in")
+            raise pycdlibexception.PyCdlibException("Directory Record Date does not support passing tm in")
 
         # This algorithm was ported from cdrkit, genisoimage.c:iso9660_date()
         tm = time.time()
@@ -159,7 +161,7 @@ class DirectoryRecordDate(ISODate):
          A string representing this Directory Record Date.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record Date not initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record Date not initialized")
 
         return struct.pack(self.fmt, self.years_since_1900, self.month,
                            self.day_of_month, self.hour, self.minute,
@@ -168,7 +170,7 @@ class DirectoryRecordDate(ISODate):
     def __ne__(self, other):
         return self.years_since_1900 != other.years_since_1900 or self.month != other.month or self.day_of_month != other.day_of_month or self.hour != other.hour or self.minute != other.minute or self.second != other.second or self.gmtoffset != other.gmtoffset
 
-class VolumeDescriptorDate(ISODate):
+class VolumeDescriptorDate(InterfaceISODate):
     '''
     A class to represent a Volume Descriptor Date as described in Ecma-119
     section 8.4.26.1.  The Volume Descriptor Date consists of a year (from 1 to
@@ -182,7 +184,7 @@ class VolumeDescriptorDate(ISODate):
     def __init__(self):
         self.initialized = False
         self.time_fmt = "%Y%m%d%H%M%S"
-        self.empty_string = '0'*16 + '\x00'
+        self.empty_string = b'0'*16 + b'\x00'
 
     def parse(self, datestr):
         '''
@@ -195,12 +197,12 @@ class VolumeDescriptorDate(ISODate):
           Nothing.
         '''
         if self.initialized:
-            raise pyisoexception.PyIsoException("This Volume Descriptor Date object is already initialized")
+            raise pycdlibexception.PyCdlibException("This Volume Descriptor Date object is already initialized")
 
         if len(datestr) != 17:
-            raise pyisoexception.PyIsoException("Invalid ISO9660 date string")
+            raise pycdlibexception.PyCdlibException("Invalid ISO9660 date string")
 
-        if datestr == self.empty_string or datestr == '\x00'*17 or datestr == '0'*17:
+        if datestr == self.empty_string or datestr == b'\x00'*17 or datestr == b'0'*17:
             # Ecma-119, 8.4.26.1 specifies that if the string was all the
             # digit zero, with the last byte 0, the time wasn't specified.
             # However, in practice I have found that some ISOs specify this
@@ -215,7 +217,7 @@ class VolumeDescriptorDate(ISODate):
             self.gmtoffset = 0
             self.present = False
         else:
-            timestruct = time.strptime(datestr[:-3], self.time_fmt)
+            timestruct = time.strptime(datestr[:-3].decode('utf-8'), self.time_fmt)
             self.year = timestruct.tm_year
             self.month = timestruct.tm_mon
             self.dayofmonth = timestruct.tm_mday
@@ -223,7 +225,7 @@ class VolumeDescriptorDate(ISODate):
             self.minute = timestruct.tm_min
             self.second = timestruct.tm_sec
             self.hundredthsofsecond = int(datestr[14:15])
-            self.gmtoffset, = struct.unpack("=b", datestr[16])
+            self.gmtoffset, = struct.unpack_from("=b", datestr, 16)
             self.present = True
 
         self.initialized = True
@@ -239,7 +241,7 @@ class VolumeDescriptorDate(ISODate):
           Date as a string.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("This Volume Descriptor Date is not yet initialized")
+            raise pycdlibexception.PyCdlibException("This Volume Descriptor Date is not yet initialized")
 
         return self.date_str
 
@@ -258,7 +260,7 @@ class VolumeDescriptorDate(ISODate):
           Nothing.
         '''
         if self.initialized:
-            raise pyisoexception.PyIsoException("This Volume Descriptor Date object is already initialized")
+            raise pycdlibexception.PyCdlibException("This Volume Descriptor Date object is already initialized")
 
         if tm is not None:
             local = time.localtime(tm)
@@ -270,7 +272,7 @@ class VolumeDescriptorDate(ISODate):
             self.second = local.tm_sec
             self.hundredthsofsecond = 0
             self.gmtoffset = gmtoffset_from_tm(tm, local)
-            self.date_str = time.strftime(self.time_fmt, local) + "{:0<2}".format(self.hundredthsofsecond) + struct.pack("=b", self.gmtoffset)
+            self.date_str = time.strftime(self.time_fmt, local).encode('utf-8') + "{:0<2}".format(self.hundredthsofsecond).encode('utf-8') + struct.pack("=b", self.gmtoffset)
             self.present = True
         else:
             self.year = 0

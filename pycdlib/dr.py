@@ -18,14 +18,15 @@
 The class to support ISO9660 Directory Records.
 '''
 
+from __future__ import absolute_import
+
 import struct
 import bisect
 
-import pyisoexception
-import utils
-import dates
-import rockridge
-import eltorito
+import pycdlib.pycdlibexception as pycdlibexception
+import pycdlib.utils as utils
+import pycdlib.dates as dates
+import pycdlib.rockridge as rockridge
 
 class XARecord(object):
     '''
@@ -45,16 +46,16 @@ class XARecord(object):
          Nothing.
         '''
         if self.initialized:
-            raise pyisoexception.PyIsoException("This XARecord is already initialized!")
+            raise pycdlibexception.PyCdlibException("This XARecord is already initialized!")
 
         (self.group_id, self.user_id, self.attributes, signature, self.filenum,
-         unused) = struct.unpack("=HHH2sB5s", xastr)
+         unused) = struct.unpack_from("=HHH2sB5s", xastr, 0)
 
-        if signature != "XA":
-            raise pyisoexception.PyIsoException("Invalid signature on the XARecord!")
+        if signature != b"XA":
+            raise pycdlibexception.PyCdlibException("Invalid signature on the XARecord!")
 
-        if unused != '\x00\x00\x00\x00\x00':
-            raise pyisoexception.PyIsoException("Unused fields should be 0")
+        if unused != b'\x00\x00\x00\x00\x00':
+            raise pycdlibexception.PyCdlibException("Unused fields should be 0")
 
         self.initialized = True
 
@@ -68,7 +69,7 @@ class XARecord(object):
          Nothing.
         '''
         if self.initialized:
-            raise pyisoexception.PyIsoException("This XARecord is already initialized!")
+            raise pycdlibexception.PyCdlibException("This XARecord is already initialized!")
 
         # FIXME: we should allow the user to set these
         self.group_id = 0
@@ -87,9 +88,9 @@ class XARecord(object):
          A string representing this Extended Attribute Record.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("This XARecord is not yet initialized!")
+            raise pycdlibexception.PyCdlibException("This XARecord is not yet initialized!")
 
-        return struct.pack("=HHH2sB5s", self.group_id, self.user_id, self.attributes, 'XA', self.filenum, '\x00'*5)
+        return struct.pack("=HHH2sB5s", self.group_id, self.user_id, self.attributes, b'XA', self.filenum, b'\x00'*5)
 
     @staticmethod
     def length():
@@ -120,6 +121,7 @@ class DirectoryRecord(object):
         self.target = None
         self.fmt = "=BBLLLL7sBBBHHB"
         self.manage_fp = False
+        self.hidden = False
 
     def parse(self, record, data_fp, parent):
         '''
@@ -133,17 +135,17 @@ class DirectoryRecord(object):
          True if this Directory Record has Rock Ridge extensions, False otherwise.
         '''
         if self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record already initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record already initialized")
 
         if len(record) > 255:
             # Since the length is supposed to be 8 bits, this should never
             # happen.
-            raise pyisoexception.PyIsoException("Directory record longer than 255 bytes!")
+            raise pycdlibexception.PyCdlibException("Directory record longer than 255 bytes!")
 
         (self.dr_len, self.xattr_len, extent_location_le, extent_location_be,
-         data_length_le, data_length_be, dr_date, self.file_flags,
+         data_length_le, data_length_be_unused, dr_date, self.file_flags,
          self.file_unit_size, self.interleave_gap_size, seqnum_le, seqnum_be,
-         self.len_fi) = struct.unpack(self.fmt, record[:33])
+         self.len_fi) = struct.unpack_from(self.fmt, record[:33], 0)
 
         # In theory we should have a check here that checks to make sure that
         # the length of the record we were passed in matches the data record
@@ -151,7 +153,7 @@ class DirectoryRecord(object):
         # incorrect, so we elide the check here.
 
         if extent_location_le != utils.swab_32bit(extent_location_be):
-            raise pyisoexception.PyIsoException("Little-endian (%d) and big-endian (%d) extent location disagree" % (extent_location_le, utils.swab_32bit(extent_location_be)))
+            raise pycdlibexception.PyCdlibException("Little-endian (%d) and big-endian (%d) extent location disagree" % (extent_location_le, utils.swab_32bit(extent_location_be)))
         self.orig_extent_loc = extent_location_le
         self.new_extent_loc = None
 
@@ -163,7 +165,7 @@ class DirectoryRecord(object):
         self.data_length = data_length_le
 
         if seqnum_le != utils.swab_16bit(seqnum_be):
-            raise pyisoexception.PyIsoException("Little-endian and big-endian seqnum disagree")
+            raise pycdlibexception.PyCdlibException("Little-endian and big-endian seqnum disagree")
         self.seqnum = seqnum_le
 
         self.date = dates.DirectoryRecordDate()
@@ -190,10 +192,11 @@ class DirectoryRecord(object):
             # However, we have seen ISOs in the wild that get this wrong, so we
             # elide a check for it.
 
+            self.file_ident = bytes(bytearray([record[33]]))
+
             # A root directory entry should always have 0 as the identifier.
-            if record[33] != '\x00':
-                raise pyisoexception.PyIsoException("Invalid root directory entry identifier")
-            self.file_ident = record[33]
+            if self.file_ident != b'\x00':
+                raise pycdlibexception.PyCdlibException("Invalid root directory entry identifier")
             self.isdir = True
         else:
             record_offset = 33
@@ -208,14 +211,14 @@ class DirectoryRecord(object):
                 record_offset += 1
 
             if len(record[record_offset:]) >= 14:
-                if record[record_offset+6:record_offset+8] == 'XA':
+                if record[record_offset+6:record_offset+8] == b'XA':
                     self.xa_record = XARecord()
                     self.xa_record.parse(record[record_offset:record_offset+14])
                     record_offset += 14
 
-            if len(record[record_offset:]) >= 2 and record[record_offset:record_offset+2] in ['SP', 'RR', 'CE', 'PX', 'ER', 'ES', 'PN', 'SL', 'NM', 'CL', 'PL', 'TF', 'SF', 'RE']:
+            if len(record[record_offset:]) >= 2 and record[record_offset:record_offset+2] in [b'SP', b'RR', b'CE', b'PX', b'ER', b'ES', b'PN', b'SL', b'NM', b'CL', b'PL', b'TF', b'SF', b'RE']:
                 self.rock_ridge = rockridge.RockRidge()
-                is_first_dir_record_of_root = self.file_ident == '\x00' and parent.parent is None
+                is_first_dir_record_of_root = self.file_ident == b'\x00' and parent.parent is None
 
                 if is_first_dir_record_of_root:
                     bytes_to_skip = 0
@@ -230,13 +233,18 @@ class DirectoryRecord(object):
 
         if self.xattr_len != 0:
             if self.file_flags & (1 << self.FILE_FLAG_RECORD_BIT):
-                raise pyisoexception.PyIsoException("Record Bit not allowed with Extended Attributes")
+                raise pycdlibexception.PyCdlibException("Record Bit not allowed with Extended Attributes")
             if self.file_flags & (1 << self.FILE_FLAG_PROTECTION_BIT):
-                raise pyisoexception.PyIsoException("Protection Bit not allowed with Extended Attributes")
+                raise pycdlibexception.PyCdlibException("Protection Bit not allowed with Extended Attributes")
 
         self.initialized = True
 
-        return self.rock_ridge != None
+        if self.rock_ridge is None:
+            ret = None
+        else:
+            ret = self.rock_ridge.rr_version
+
+        return ret
 
     def _new(self, mangledname, parent, seqnum, isdir, length, rock_ridge,
              rr_name, rr_symlink_target, rr_relocated_child, rr_relocated,
@@ -255,6 +263,10 @@ class DirectoryRecord(object):
          rr_name - The Rock Ridge name to associate with this directory record.
          rr_symlink_target - The target for the symlink, if this is a symlink
                              record (otherwise, None).
+         rr_relocated_child - True if this is a directory record for a rock ridge relocated child.
+         rr_relocated - True if this is a directory record for a relocated entry.
+         rr_relocated_parent - True if this is a directory record for a rock ridge relocated parent.
+         xa - True if this is an Extended Attribute record.
         Returns:
          Nothing.
         '''
@@ -272,7 +284,7 @@ class DirectoryRecord(object):
         self.date.new()
 
         if length > 2**32-1:
-            raise pyisoexception.PyIsoException("Maximum supported file length is 2^32-1")
+            raise pycdlibexception.PyCdlibException("Maximum supported file length is 2^32-1")
 
         self.data_length = length
         # FIXME: if the length of the item is more than 2^32 - 1, and the
@@ -332,16 +344,15 @@ class DirectoryRecord(object):
         self.dr_len += (self.dr_len % 2)
 
         self.rock_ridge = None
-        if rock_ridge:
+        if rock_ridge is not None:
             self.rock_ridge = rockridge.RockRidge()
-            is_first_dir_record_of_root = self.file_ident == '\x00' and parent.parent is None
+            is_first_dir_record_of_root = self.file_ident == b'\x00' and parent.parent is None
             bytes_to_skip = 0
             if xa:
                 bytes_to_skip = XARecord.length()
-            # FIXME: allow the user to set the rock ridge version
             self.dr_len = self.rock_ridge.new(is_first_dir_record_of_root,
                                               rr_name, self.isdir,
-                                              rr_symlink_target, "1.09",
+                                              rr_symlink_target, rock_ridge,
                                               rr_relocated_child,
                                               rr_relocated,
                                               rr_relocated_parent,
@@ -350,16 +361,16 @@ class DirectoryRecord(object):
 
             if self.isdir:
                 if parent.parent is not None:
-                    if self.file_ident == '\x00':
+                    if self.file_ident == b'\x00':
                         self.parent.rock_ridge.add_to_file_links()
                         self.rock_ridge.add_to_file_links()
-                    elif self.file_ident == '\x01':
+                    elif self.file_ident == b'\x01':
                         self.rock_ridge.copy_file_links(self.parent.parent.children[1].rock_ridge)
                     else:
                         self.parent.rock_ridge.add_to_file_links()
                         self.parent.children[0].rock_ridge.add_to_file_links()
                 else:
-                    if self.file_ident != '\x00' and self.file_ident != '\x01':
+                    if self.file_ident != b'\x00' and self.file_ident != b'\x01':
                         self.parent.children[0].rock_ridge.add_to_file_links()
                         self.parent.children[1].rock_ridge.add_to_file_links()
                     else:
@@ -367,7 +378,7 @@ class DirectoryRecord(object):
 
         self.initialized = True
 
-    def new_symlink(self, name, parent, rr_path, seqnum, rr_name, xa):
+    def new_symlink(self, name, parent, rr_path, seqnum, rock_ridge, rr_name, xa):
         '''
         Create a new symlink Directory Record.  This implies that the new
         record will be Rock Ridge.
@@ -377,14 +388,16 @@ class DirectoryRecord(object):
          parent - The parent of this directory record.
          rr_path - The symlink target for this directory record.
          seqnum - The sequence number for this directory record.
+         rock_ridge - The version of Rock Ridge to use for this directory record.
          rr_name - The Rock Ridge name for this directory record.
+         xa - True if this is an Extended Attribute record.
         Returns:
          Nothing.
         '''
         if self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record already initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record already initialized")
 
-        self._new(name, parent, seqnum, False, 0, True, rr_name, rr_path, False, False, False, xa)
+        self._new(name, parent, seqnum, False, 0, rock_ridge, rr_name, rr_path, False, False, False, xa)
 
     def new_fake_symlink(self, name, parent, seqnum):
         '''
@@ -399,9 +412,9 @@ class DirectoryRecord(object):
          Nothing.
         '''
         if self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record already initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record already initialized")
 
-        self._new(name, parent, seqnum, False, 0, False, None, None, False, False, False, False)
+        self._new(name, parent, seqnum, False, 0, None, None, None, False, False, False, False)
 
     def new_fp(self, fp, manage_fp, length, isoname, parent, seqnum, rock_ridge, rr_name, xa):
         '''
@@ -409,22 +422,25 @@ class DirectoryRecord(object):
 
         Parameters:
          fp - A file object that contains the data for this directory record.
+         manage_fp - True if pycdlib is managing the file object, False otherwise.
          length - The length of the data.
          isoname - The name for this directory record.
          parent - The parent of this directory record.
          seqnum - The sequence number for this directory record.
          rock_ridge - Whether to make this a Rock Ridge directory record.
          rr_name - The Rock Ridge name for this directory record.
+         xa - True if this is an Extended Attribute record.
         Returns:
          Nothing.
         '''
         if self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record already initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record already initialized")
 
         self.original_data_location = self.DATA_IN_EXTERNAL_FP
         self.data_fp = fp
         self.manage_fp = manage_fp
-        self._new(isoname, parent, seqnum, False, length, rock_ridge, rr_name, None, False, False, False, xa)
+        self._new(isoname, parent, seqnum, False, length, rock_ridge, rr_name,
+                  None, False, False, False, xa)
 
     def new_root(self, seqnum, log_block_size):
         '''
@@ -437,9 +453,9 @@ class DirectoryRecord(object):
          Nothing.
         '''
         if self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record already initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record already initialized")
 
-        self._new('\x00', None, seqnum, True, log_block_size, False, None, None, False, False, False, False)
+        self._new(b'\x00', None, seqnum, True, log_block_size, None, None, None, False, False, False, False)
 
     def new_dot(self, root, seqnum, rock_ridge, log_block_size, xa):
         '''
@@ -450,13 +466,15 @@ class DirectoryRecord(object):
          seqnum - The sequence number for this directory record.
          rock_ridge - Whether to make this a Rock Ridge directory record.
          log_block_size - The logical block size to use.
+         xa - True if this is an Extended Attribute record.
         Returns:
          Nothing.
         '''
         if self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record already initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record already initialized")
 
-        self._new('\x00', root, seqnum, True, log_block_size, rock_ridge, None, None, False, False, False, xa)
+        self._new(b'\x00', root, seqnum, True, log_block_size, rock_ridge, None,
+                  None, False, False, False, xa)
 
     def new_dotdot(self, root, seqnum, rock_ridge, log_block_size, rr_relocated_parent, xa):
         '''
@@ -467,13 +485,16 @@ class DirectoryRecord(object):
          seqnum - The sequence number for this directory record.
          rock_ridge - Whether to make this a Rock Ridge directory record.
          log_block_size - The logical block size to use.
+         rr_relocated_parent - True if this is a Rock Ridge relocated parent.
+         xa - True if this is an Extended Attribute record.
         Returns:
          Nothing.
         '''
         if self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record already initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record already initialized")
 
-        self._new('\x01', root, seqnum, True, log_block_size, rock_ridge, None, None, False, False, rr_relocated_parent, xa)
+        self._new(b'\x01', root, seqnum, True, log_block_size, rock_ridge, None,
+                  None, False, False, rr_relocated_parent, xa)
 
     def new_dir(self, name, parent, seqnum, rock_ridge, rr_name, log_block_size,
                 rr_relocated_child, rr_relocated, xa):
@@ -487,17 +508,22 @@ class DirectoryRecord(object):
          rock_ridge - Whether to make this a Rock Ridge directory record.
          rr_name - The Rock Ridge name for this directory record.
          log_block_size - The logical block size to use.
+         rr_relocated_child - True if this is a Rock Ridge relocated child.
+         rr_relocated - True if this is a Rock Ridge relocated entry.
+         xa - True if this is an Extended Attribute record.
         Returns:
          Nothing.
         '''
         if self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record already initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record already initialized")
 
-        self._new(name, parent, seqnum, True, log_block_size, rock_ridge, rr_name, None, rr_relocated_child, rr_relocated, False, xa)
+        self._new(name, parent, seqnum, True, log_block_size, rock_ridge,
+                  rr_name, None, rr_relocated_child, rr_relocated, False, xa)
 
     def new_link(self, target, length, isoname, parent, seqnum, rock_ridge, rr_name, xa):
         '''
-        Create a new file Directory Record.
+        Create a new linked Directory Record.  These are directory records that
+        are somehow linked to another record.
 
         Parameters:
          target - The target directory record.
@@ -507,14 +533,62 @@ class DirectoryRecord(object):
          seqnum - The sequence number for this directory record.
          rock_ridge - Whether to make this a Rock Ridge directory record.
          rr_name - The Rock Ridge name for this directory record.
+         xa - True if this is an Extended Attribute record.
         Returns:
          Nothing.
         '''
         if self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record already initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record already initialized")
 
         self.target = target
         self._new(isoname, parent, seqnum, False, length, rock_ridge, rr_name, None, False, False, False, xa)
+
+    def parse_hidden(self, fp, length, extent_loc, parent, seqnum):
+        '''
+        Create a new hidden Directory Record.  These are file directory records
+        that act as containers for information that is hidden from the normal
+        filesystems, but still has data on the final ISO.  While we are creating
+        a new object here, the API is actually called "parse" because we only
+        use this while parsing the original ISO.
+
+        Parameters:
+         fp - A file object that contains the data for this directory record.
+         length - The length of the data.
+         extent_loc - The location of the data on the ISO.
+         parent - The parent of this directory record.
+         seqnum - The sequence number for this directory record.
+        Returns:
+         Nothing.
+        '''
+        if self.initialized:
+            raise pycdlibexception.PyCdlibException("Directory Record already initialized")
+
+        self._new("", parent, seqnum, False, length, None, "", None, False, False, False, False)
+        self.data_fp = fp
+        self.manage_fp = False
+        self.hidden = True
+        self.original_data_location = self.DATA_ON_ORIGINAL_ISO
+        self.orig_extent_loc = extent_loc
+
+    def new_hidden_from_old(self, rec, extent_loc, parent, seqnum):
+        '''
+        Create a new hidden directory record using information from an old one.
+
+        Parameters:
+         rec - The old DirectoryRecord object to copy data out of.
+         extent_loc - The location of the data on the ISO.
+         parent - The parent of this directory record.
+         seqnum - The sequence number for this directory record.
+        '''
+        if self.initialized:
+            raise pycdlibexception.PyCdlibException("Directory Record already initialized")
+
+        self._new(b"", parent, seqnum, False, rec.data_length, None, b"", None, False, False, False, False)
+        self.data_fp = rec.data_fp
+        self.manage_fp = rec.manage_fp
+        self.hidden = True
+        self.original_data_location = rec.original_data_location
+        self.orig_extent_loc = extent_loc
 
     def update_fp(self, fp, length):
         '''
@@ -527,7 +601,7 @@ class DirectoryRecord(object):
          Nothing.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record not yet initialized")
 
         self.original_data_location = self.DATA_IN_EXTERNAL_FP
         self.data_fp = fp
@@ -547,7 +621,7 @@ class DirectoryRecord(object):
          extent, False otherwise.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record not yet initialized")
 
         if not self.isdir:
             raise Exception("Trying to add a child to a record that is not a directory")
@@ -561,7 +635,7 @@ class DirectoryRecord(object):
         if index != len(self.children):
             if self.children[index].file_ident == child.file_ident:
                 if not self.children[index].is_associated_file() and not child.is_associated_file():
-                    raise pyisoexception.PyIsoException("Parent %s already has a child named %s" % (self.file_ident, child.file_ident))
+                    raise pycdlibexception.PyCdlibException("Parent %s already has a child named %s" % (self.file_identifier(), child.file_identifier()))
         self.children.insert(index, child)
 
         # Check if child.dr_len will go over a boundary; if so, increase our
@@ -587,7 +661,7 @@ class DirectoryRecord(object):
          True if removing this child caused an underflow, False otherwise.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record not yet initialized")
 
         underflow = False
         self.curr_length -= child.directory_record_length()
@@ -624,7 +698,7 @@ class DirectoryRecord(object):
          True if this DirectoryRecord object is a directory, False otherwise.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record not yet initialized")
         return self.isdir
 
     def is_file(self):
@@ -637,7 +711,7 @@ class DirectoryRecord(object):
          True if this DirectoryRecord object is a file, False otherwise.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record not yet initialized")
         return not self.isdir
 
     def is_dot(self):
@@ -650,8 +724,8 @@ class DirectoryRecord(object):
          True if this DirectoryRecord object is a "dot" entry, False otherwise.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record not yet initialized")
-        return self.file_ident == '\x00'
+            raise pycdlibexception.PyCdlibException("Directory Record not yet initialized")
+        return self.file_ident == b'\x00'
 
     def is_dotdot(self):
         '''
@@ -663,8 +737,8 @@ class DirectoryRecord(object):
          True if this DirectoryRecord object is a "dotdot" entry, False otherwise.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record not yet initialized")
-        return self.file_ident == '\x01'
+            raise pycdlibexception.PyCdlibException("Directory Record not yet initialized")
+        return self.file_ident == b'\x01'
 
     def directory_record_length(self):
         '''
@@ -676,7 +750,7 @@ class DirectoryRecord(object):
          The length of this Directory Record.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record not yet initialized")
         return self.dr_len
 
     def _extent_location(self):
@@ -703,7 +777,7 @@ class DirectoryRecord(object):
          Extent location of this Directory Record on the ISO.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record not yet initialized")
         return self._extent_location()
 
     def file_identifier(self):
@@ -716,13 +790,13 @@ class DirectoryRecord(object):
          String representing the identifier of this Directory Record.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record not yet initialized")
         if self.is_root:
-            return '/'
-        if self.file_ident == '\x00':
-            return '.'
-        if self.file_ident == '\x01':
-            return '..'
+            return b'/'
+        if self.file_ident == b'\x00':
+            return b'.'
+        if self.file_ident == b'\x01':
+            return b'..'
         return self.file_ident
 
     def file_length(self):
@@ -735,7 +809,7 @@ class DirectoryRecord(object):
          Integer file length of this Directory Record.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record not yet initialized")
         ret = self.data_length
         if self.boot_info_table is not None:
             ret = self.boot_info_table.orig_len
@@ -751,7 +825,7 @@ class DirectoryRecord(object):
          String representing this Directory Record.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record not yet initialized")
 
         # Ecma-119 9.1.5 says the date should reflect the time when the
         # record was written, so we make a new date now and use that to
@@ -760,29 +834,28 @@ class DirectoryRecord(object):
         self.date.new()
 
         padlen = struct.calcsize(self.fmt) + self.len_fi
-        padstr = '\x00' * (padlen % 2)
+        padstr = b'\x00' * (padlen % 2)
 
         extent_loc = self._extent_location()
 
-        ret = struct.pack(self.fmt, self.dr_len, self.xattr_len,
-                          extent_loc, utils.swab_32bit(extent_loc),
-                          self.data_length, utils.swab_32bit(self.data_length),
-                          self.date.record(), self.file_flags,
-                          self.file_unit_size, self.interleave_gap_size,
-                          self.seqnum, utils.swab_16bit(self.seqnum),
-                          self.len_fi) + self.file_ident
-
-        ret += padstr
-
+        xa_rec = b""
         if self.xa_record is not None:
-            ret += self.xa_record.record()
-
+            xa_rec = self.xa_record.record()
+        rr_rec = b""
         if self.rock_ridge is not None:
-            ret += self.rock_ridge.record()
+            rr_rec = self.rock_ridge.record()
 
-        ret += '\x00' * (len(ret) % 2)
+        outlist = [struct.pack(self.fmt, self.dr_len, self.xattr_len,
+                               extent_loc, utils.swab_32bit(extent_loc),
+                               self.data_length, utils.swab_32bit(self.data_length),
+                               self.date.record(), self.file_flags,
+                               self.file_unit_size, self.interleave_gap_size,
+                               self.seqnum, utils.swab_16bit(self.seqnum),
+                               self.len_fi) + self.file_ident + padstr + xa_rec + rr_rec]
 
-        return ret
+        outlist.append(b'\x00' * (len(outlist[0]) % 2))
+
+        return b"".join(outlist)
 
     def open_data(self, logical_block_size):
         '''
@@ -800,10 +873,10 @@ class DirectoryRecord(object):
          of the data for this Directory Record.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record not yet initialized")
 
         if self.isdir:
-            raise pyisoexception.PyIsoException("Cannot write out a directory")
+            raise pycdlibexception.PyCdlibException("Cannot write out a directory")
 
         if self.target is not None:
             return self.target.open_data(logical_block_size)
@@ -827,7 +900,7 @@ class DirectoryRecord(object):
          otherwise.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record not yet initialized")
 
         return self.file_flags & (1 << self.FILE_FLAG_ASSOCIATED_FILE_BIT)
 
@@ -842,7 +915,7 @@ class DirectoryRecord(object):
          Nothing.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record not yet initialized")
 
         self.ptr = ptr
 
@@ -856,7 +929,7 @@ class DirectoryRecord(object):
          Nothing.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record not yet initialized")
 
         self.boot_info_table = boot_info_table
 
@@ -870,7 +943,7 @@ class DirectoryRecord(object):
          Nothing.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Directory Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Directory Record not yet initialized")
 
         if self.manage_fp:
             self.data_fp.close()
@@ -891,22 +964,25 @@ class DirectoryRecord(object):
         # they differ.  However, we can more easily just do the string equality
         # comparison, since it will always be the case that 0x20 will be less
         # than any of the other allowed characters in the strings.
-        if self.file_ident == '\x00':
-            if other.file_ident == '\x00':
+        if self.file_ident == b'\x00':
+            if other.file_ident == b'\x00':
                 return False
             return True
-        if other.file_ident == '\x00':
+        if other.file_ident == b'\x00':
             return False
 
-        if self.file_ident == '\x01':
-            if other.file_ident == '\x00':
+        if self.file_ident == b'\x01':
+            if other.file_ident == b'\x00':
                 return False
             return True
 
-        if other.file_ident == '\x01':
+        if other.file_ident == b'\x01':
             # If self.file_ident was '\x00', it would have been caught above.
             return False
         return self.file_ident < other.file_ident
 
     def __ne__(self, other):
         return self.dr_len != other.dr_len or self.xattr_len != other.xattr_len or self._extent_location() != other._extent_location() or self.data_length != other.data_length or self.date != other.date or self.file_flags != other.file_flags or self.file_unit_size != other.file_unit_size or self.interleave_gap_size != other.interleave_gap_size or self.seqnum != other.seqnum or self.len_fi != other.len_fi
+
+    def __eq__(self, other):
+        return not self.__ne__(other)

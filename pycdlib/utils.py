@@ -15,14 +15,24 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 '''
-Various utilities for PyIso.
+Various utilities for PyCdlib.
 '''
 
+from __future__ import absolute_import
+
 import socket
+import io
 
-import sendfile
+have_sendfile = True
+try:
+    from sendfile import sendfile
+except ImportError:
+    try:
+        from os import sendfile
+    except ImportError:
+        have_sendfile = False
 
-import pyisoexception
+import pycdlib.pycdlibexception as pycdlibexception
 
 def swab_32bit(input_int):
     '''
@@ -62,17 +72,6 @@ def ceiling_div(numer, denom):
     # See https://stackoverflow.com/questions/14822184/is-there-a-ceiling-equivalent-of-operator-in-python.
     return -(-numer // denom)
 
-def hexdump(st):
-    '''
-    A utility function to print a string in hex.
-
-    Parameters:
-     st - The string to print.
-    Returns:
-     A string containing the hexadecimal representation of the input string.
-    '''
-    return ':'.join(x.encode('hex') for x in st)
-
 def copy_data(data_length, blocksize, infp, outfp):
     '''
     A utility function to copy data from the input file object to the output
@@ -87,7 +86,20 @@ def copy_data(data_length, blocksize, infp, outfp):
     Returns:
      Nothing.
     '''
-    if hasattr(infp, 'fileno') and hasattr(outfp, 'fileno'):
+    use_sendfile = False
+    if have_sendfile:
+        # Python 3 implements the fileno method for all file-like objects, so
+        # we can't just use the existence of the method to tell whether it is
+        # available.  Instead, we try to assign it, and if we fail, then we
+        # assume it is not available.
+        try:
+            x_unused = infp.fileno()
+            y_unused = outfp.fileno()
+            use_sendfile = True
+        except (AttributeError, io.UnsupportedOperation):
+            pass
+
+    if use_sendfile:
         # This is one of those instances where using the file object and the
         # file descriptor causes problems.  The sendfile() call actually updates
         # the underlying file descriptor, but the file object does not know
@@ -97,7 +109,7 @@ def copy_data(data_length, blocksize, infp, outfp):
         # properly.
         in_offset = infp.tell()
         out_offset = outfp.tell()
-        sendfile.sendfile(outfp.fileno(), infp.fileno(), in_offset, data_length)
+        sendfile(outfp.fileno(), infp.fileno(), in_offset, data_length)
         infp.seek(in_offset + data_length)
         outfp.seek(out_offset + data_length)
     else:
@@ -106,7 +118,10 @@ def copy_data(data_length, blocksize, infp, outfp):
         while left > 0:
             if left < readsize:
                 readsize = left
-            outfp.write(infp.read(readsize))
+            data = infp.read(readsize)
+            if len(data) != readsize:
+                raise pycdlibexception.PyCdlibException("Failed to read expected bytes")
+            outfp.write(data)
             left -= readsize
 
 def encode_space_pad(instr, length, encoding):
@@ -122,9 +137,9 @@ def encode_space_pad(instr, length, encoding):
     Returns:
      The input string encoded in the encoding and padded with encoded spaces.
     '''
-    output = instr.encode(encoding)
+    output = instr.decode('utf-8').encode(encoding)
     if len(output) > length:
-        raise pyisoexception.PyIsoException("Input string too long!")
+        raise pycdlibexception.PyCdlibException("Input string too long!")
 
     encoded_space = ' '.encode(encoding)
 
@@ -160,7 +175,9 @@ def normpath(path):
         dot = '.'
         dotdot = '..'
     if path == empty:
-        return dot
+        if isinstance(dot, bytes):
+            return dot
+        return dot.encode('utf-8')
     initial_slashes = path.startswith(sep)
     comps = path.split(sep)
     new_comps = []
@@ -174,4 +191,8 @@ def normpath(path):
     comps = new_comps
     path = sep.join(comps)
     path = sep*initial_slashes + path
+    if not isinstance(path, bytes):
+        path = path.encode('utf-8')
+    if not isinstance(dot, bytes):
+        dot = dot.encode('utf-8')
     return path or dot

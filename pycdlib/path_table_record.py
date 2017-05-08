@@ -18,16 +18,18 @@
 Class to support ISO9660 Path Table Records.
 '''
 
+from __future__ import absolute_import
+
 import struct
 
-import pyisoexception
-import utils
+import pycdlib.pycdlibexception as pycdlibexception
+import pycdlib.utils as utils
 
 class PathTableRecord(object):
     '''
     A class that represents a single ISO9660 Path Table Record.
     '''
-    FMT = "=BBLH"
+    FMT = b"=BBLH"
 
     def __init__(self):
         self.initialized = False
@@ -43,7 +45,7 @@ class PathTableRecord(object):
          Nothing.
         '''
         (self.len_di, self.xattr_length, self.extent_location,
-         self.parent_directory_num) = struct.unpack(self.FMT, data[:8])
+         self.parent_directory_num) = struct.unpack_from(self.FMT, data[:8], 0)
 
         if self.len_di % 2 != 0:
             self.directory_identifier = data[8:-1]
@@ -65,7 +67,7 @@ class PathTableRecord(object):
          A string representing this Path Table Record.
         '''
         return struct.pack(self.FMT, self.len_di, self.xattr_length,
-                           ext_loc, parent_dir_num) + self.directory_identifier + '\x00'*(self.len_di % 2)
+                           ext_loc, parent_dir_num) + self.directory_identifier + b'\x00'*(self.len_di % 2)
 
     def record_little_endian(self):
         '''
@@ -78,7 +80,7 @@ class PathTableRecord(object):
          A string representing the little endian version of this Path Table Record.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Path Table Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Path Table Record not yet initialized")
 
         return self._record(self.extent_location, self.parent_directory_num)
 
@@ -93,7 +95,7 @@ class PathTableRecord(object):
          A string representing the big endian version of this Path Table Record.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Path Table Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Path Table Record not yet initialized")
 
         return self._record(utils.swab_32bit(self.extent_location),
                             utils.swab_16bit(self.parent_directory_num))
@@ -125,6 +127,7 @@ class PathTableRecord(object):
         self.directory_identifier = name
         self.dirrecord = dirrecord
         self.depth = depth
+        self.directory_num = None # This will get set later
         self.initialized = True
 
     def new_root(self, dirrecord):
@@ -137,9 +140,9 @@ class PathTableRecord(object):
          Nothing.
         '''
         if self.initialized:
-            raise pyisoexception.PyIsoException("Path Table Record already initialized")
+            raise pycdlibexception.PyCdlibException("Path Table Record already initialized")
 
-        self._new("\x00", dirrecord, 1, 1)
+        self._new(b"\x00", dirrecord, 1, 1)
 
     def new_dir(self, name, dirrecord, parent_dir_num, depth):
         '''
@@ -154,7 +157,7 @@ class PathTableRecord(object):
          Nothing.
         '''
         if self.initialized:
-            raise pyisoexception.PyIsoException("Path Table Record already initialized")
+            raise pycdlibexception.PyCdlibException("Path Table Record already initialized")
 
         self._new(name, dirrecord, parent_dir_num, depth)
 
@@ -169,7 +172,7 @@ class PathTableRecord(object):
          Nothing.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Path Table Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Path Table Record not yet initialized")
 
         self.dirrecord = dirrecord
 
@@ -184,7 +187,7 @@ class PathTableRecord(object):
          Nothing.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Path Table Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Path Table Record not yet initialized")
 
         self.extent_location = self.dirrecord.extent_location()
 
@@ -198,7 +201,7 @@ class PathTableRecord(object):
          Nothing.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Path Table Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Path Table Record not yet initialized")
         self.depth = depth
 
     def set_directory_number(self, dirnum):
@@ -211,7 +214,7 @@ class PathTableRecord(object):
          Nothing.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Path Table Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Path Table Record not yet initialized")
         self.directory_num = dirnum
 
     def update_parent_directory_number(self):
@@ -225,17 +228,30 @@ class PathTableRecord(object):
          Nothing.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("Path Table Record not yet initialized")
+            raise pycdlibexception.PyCdlibException("Path Table Record not yet initialized")
         if self.dirrecord.parent is None:
             self.parent_directory_num = 1
         else:
             self.parent_directory_num = self.dirrecord.parent.ptr.directory_num
 
-    def __lt__(self, other):
+    def _less_than(self, other, self_parent_dir_num, other_parent_dir_num):
+        '''
+        An internal method to compute whether this object is less than another
+        object, with the parent directory number passed in.  We pass in the
+        parent directory number so that this can work for both little endian
+        and big endian records.
+
+        Parameters:
+         other - The path table record to compare this one against
+         self_parent_dir_num - The parent directory number for this PTR
+         other_parent_dir_num - The parent directory number for the other PTR
+        Returns:
+         True if this PTR is less than the other PTR.
+        '''
         if self.depth != other.depth:
             return self.depth < other.depth
-        elif self.parent_directory_num != other.parent_directory_num:
-            return self.parent_directory_num < other.parent_directory_num
+        elif self_parent_dir_num != other_parent_dir_num:
+            return self_parent_dir_num < other_parent_dir_num
         else:
             # This needs to return whether self.directory_identifier is less than
             # other.directory_identifier.  Here we use the ISO9600 Path Table
@@ -246,25 +262,39 @@ class PathTableRecord(object):
             # 3.  Other entries are sorted lexically; this does not exactly
             #     match the sorting method specified in Ecma-119, but does OK
             #     for now.
-            if self.directory_identifier == '\x00':
+            if self.directory_identifier == b'\x00':
                 # If both self.directory_identifier and other.directory_identifier
                 # are 0, then they are not strictly less.
-                if other.directory_identifier == '\x00':
+                if other.directory_identifier == b'\x00':
                     return False
                 return True
-            if other.directory_identifier == '\x00':
+            if other.directory_identifier == b'\x00':
                 return False
 
-            if self.directory_identifier == '\x01':
+            if self.directory_identifier == b'\x01':
                 if other.directory_identifier == '\x00':
                     return False
                 return True
 
-            if other.directory_identifier == '\x01':
+            if other.directory_identifier == b'\x01':
                 # If self.directory_identifier was '\x00', it would have been
                 # caught above.
                 return False
             return self.directory_identifier < other.directory_identifier
+
+    def __lt__(self, other):
+        return self._less_than(other, self.parent_directory_num, other.parent_directory_num)
+
+    def less_than_be(self, other):
+        '''
+        A method to compare this big-endian PTR with another big-endian PTR.
+
+        Parameters:
+         other - The other big-endian PTR to compare against
+        Returns:
+         True if this PTR is less than the other PTR.
+        '''
+        return self._less_than(other, utils.swab_16bit(self.parent_directory_num), utils.swab_16bit(other.parent_directory_num))
 
     def equal_to_be(self, be_record):
         '''
@@ -278,7 +308,7 @@ class PathTableRecord(object):
          Nothing.
         '''
         if not self.initialized:
-            raise pyisoexception.PyIsoException("This Path Table Record is not yet initialized")
+            raise pycdlibexception.PyCdlibException("This Path Table Record is not yet initialized")
 
         if be_record.len_di != self.len_di or \
            be_record.xattr_length != self.xattr_length or \

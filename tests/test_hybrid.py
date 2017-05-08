@@ -2,28 +2,25 @@ import pytest
 import subprocess
 import os
 import sys
-import StringIO
+try:
+    from cStringIO import StringIO as BytesIO
+except ImportError:
+    from io import BytesIO
 import shutil
 
-prefix = 'src/pyiso'
-for i in range(0,3):
-    if os.path.exists(os.path.join(prefix, 'pyiso.py')):
-        sys.path.insert(0, prefix)
-        break
-    else:
-        prefix = '../' + prefix
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pyiso
+import pycdlib
 
 from common import *
 
 def do_a_test(tmpdir, iso, check_func):
-    out = StringIO.StringIO()
+    out = BytesIO()
     iso.write_fp(out)
 
     check_func(iso, len(out.getvalue()))
 
-    iso2 = pyiso.PyIso()
+    iso2 = pycdlib.PyCdlib()
     iso2.open_fp(out)
     check_func(iso2, len(out.getvalue()))
     iso2.close()
@@ -33,12 +30,12 @@ def test_hybrid_nofiles(tmpdir):
     indir = tmpdir.mkdir("nofiles")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -55,13 +52,13 @@ def test_hybrid_onefile(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1")
 
     do_a_test(tmpdir, iso, check_onefile)
 
@@ -74,8 +71,8 @@ def test_hybrid_onedir(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -90,17 +87,17 @@ def test_hybrid_twofiles(tmpdir):
     indir = tmpdir.mkdir("twofile")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    barstr = "bar\n"
-    iso.add_fp(StringIO.StringIO(barstr), len(barstr), "/BAR.;1")
+    barstr = b"bar\n"
+    iso.add_fp(BytesIO(barstr), len(barstr), "/BAR.;1")
 
     do_a_test(tmpdir, iso, check_twofiles)
 
@@ -111,17 +108,17 @@ def test_hybrid_twofiles2(tmpdir):
     indir = tmpdir.mkdir("twofile")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "bar"), 'wb') as outfp:
-        outfp.write("bar\n")
+        outfp.write(b"bar\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1")
 
     do_a_test(tmpdir, iso, check_twofiles)
 
@@ -134,16 +131,16 @@ def test_hybrid_twofiles3(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1")
 
-    barstr = "bar\n"
-    iso.add_fp(StringIO.StringIO(barstr), len(barstr), "/BAR.;1")
+    barstr = b"bar\n"
+    iso.add_fp(BytesIO(barstr), len(barstr), "/BAR.;1")
 
     do_a_test(tmpdir, iso, check_twofiles)
 
@@ -156,16 +153,16 @@ def test_hybrid_twofiles4(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    barstr = "bar\n"
-    iso.add_fp(StringIO.StringIO(barstr), len(barstr), "/BAR.;1")
+    barstr = b"bar\n"
+    iso.add_fp(BytesIO(barstr), len(barstr), "/BAR.;1")
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1")
 
     do_a_test(tmpdir, iso, check_twofiles)
 
@@ -179,8 +176,8 @@ def test_hybrid_twodirs(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -198,8 +195,8 @@ def test_hybrid_twodirs2(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -216,8 +213,8 @@ def test_hybrid_twodirs3(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -235,8 +232,8 @@ def test_hybrid_twodirs4(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -252,14 +249,14 @@ def test_hybrid_rmfile(tmpdir):
     indir = tmpdir.mkdir("twofile")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     with open(os.path.join(str(indir), "bar"), 'wb') as outfp:
-        outfp.write("bar\n")
+        outfp.write(b"bar\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -274,13 +271,13 @@ def test_hybrid_rmdir(tmpdir):
     indir = tmpdir.mkdir("rmdir")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     indir.mkdir("dir1")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -295,12 +292,12 @@ def test_hybrid_onefileonedir(tmpdir):
     indir = tmpdir.mkdir("rmdir")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -318,13 +315,13 @@ def test_hybrid_onefileonedir2(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1")
 
     do_a_test(tmpdir, iso, check_onefileonedir)
 
@@ -337,15 +334,15 @@ def test_hybrid_onefileonedir3(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
     iso.add_directory("/DIR1")
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1")
 
     do_a_test(tmpdir, iso, check_onefileonedir)
 
@@ -358,13 +355,13 @@ def test_hybrid_onefileonedir4(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1")
 
     iso.add_directory("/DIR1")
 
@@ -377,19 +374,19 @@ def test_hybrid_onefile_onedirwithfile(tmpdir):
     indir = tmpdir.mkdir("rmdir")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
     iso.add_directory("/DIR1")
 
-    barstr = "bar\n"
-    iso.add_fp(StringIO.StringIO(barstr), len(barstr), "/DIR1/BAR.;1")
+    barstr = b"bar\n"
+    iso.add_fp(BytesIO(barstr), len(barstr), "/DIR1/BAR.;1")
 
     do_a_test(tmpdir, iso, check_onefile_onedirwithfile)
 
@@ -403,16 +400,16 @@ def test_hybrid_onefile_onedirwithfile2(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1")
 
-    barstr = "bar\n"
-    iso.add_fp(StringIO.StringIO(barstr), len(barstr), "/DIR1/BAR.;1")
+    barstr = b"bar\n"
+    iso.add_fp(BytesIO(barstr), len(barstr), "/DIR1/BAR.;1")
 
     do_a_test(tmpdir, iso, check_onefile_onedirwithfile)
 
@@ -425,18 +422,18 @@ def test_hybrid_onefile_onedirwithfile3(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1")
 
     iso.add_directory("/DIR1")
 
-    barstr = "bar\n"
-    iso.add_fp(StringIO.StringIO(barstr), len(barstr), "/DIR1/BAR.;1")
+    barstr = b"bar\n"
+    iso.add_fp(BytesIO(barstr), len(barstr), "/DIR1/BAR.;1")
 
     do_a_test(tmpdir, iso, check_onefile_onedirwithfile)
 
@@ -448,17 +445,17 @@ def test_hybrid_onefile_onedirwithfile4(tmpdir):
     outfile = str(indir)+".iso"
     dir1 = indir.mkdir('dir1')
     with open(os.path.join(str(dir1), "bar"), 'wb') as outfp:
-        outfp.write("bar\n")
+        outfp.write(b"bar\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1")
 
     do_a_test(tmpdir, iso, check_onefile_onedirwithfile)
 
@@ -471,18 +468,18 @@ def test_hybrid_twoextentfile(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    outstr = ""
+    outstr = b""
     for j in range(0, 8):
         for i in range(0, 256):
             outstr += struct.pack("=B", i)
     outstr += struct.pack("=B", 0)
 
-    iso.add_fp(StringIO.StringIO(outstr), len(outstr), "/BIGFILE.;1")
+    iso.add_fp(BytesIO(outstr), len(outstr), "/BIGFILE.;1")
 
     do_a_test(tmpdir, iso, check_twoextentfile)
 
@@ -498,8 +495,8 @@ def test_hybrid_ptr_extent(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -520,8 +517,8 @@ def test_hybrid_ptr_extent2(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -542,8 +539,8 @@ def test_hybrid_remove_many(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -563,8 +560,8 @@ def test_hybrid_twoleveldeepdir(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -581,8 +578,8 @@ def test_hybrid_twoleveldeepdir2(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -603,8 +600,8 @@ def test_hybrid_rmsubdir(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -623,8 +620,8 @@ def test_hybrid_removeall(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -643,15 +640,15 @@ def test_hybrid_add_new_file_to_subdir(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    iso = pyiso.PyIso()
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1")
 
-    barstr = "bar\n"
-    iso.add_fp(StringIO.StringIO(barstr), len(barstr), "/DIR1/BAR.;1")
+    barstr = b"bar\n"
+    iso.add_fp(BytesIO(barstr), len(barstr), "/DIR1/BAR.;1")
 
     do_a_test(tmpdir, iso, check_onefile_onedirwithfile)
 
@@ -664,14 +661,14 @@ def test_hybrid_eltorito_add(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
     # Now add the eltorito stuff
-    bootstr = "boot\n"
-    iso.add_fp(StringIO.StringIO(bootstr), len(bootstr), "/BOOT.;1")
+    bootstr = b"boot\n"
+    iso.add_fp(BytesIO(bootstr), len(bootstr), "/BOOT.;1")
     iso.add_eltorito("/BOOT.;1", "/BOOT.CAT;1")
 
     do_a_test(tmpdir, iso, check_eltorito_nofiles)
@@ -683,13 +680,13 @@ def test_hybrid_eltorito_remove(tmpdir):
     indir = tmpdir.mkdir("eltoritonofiles")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -705,13 +702,13 @@ def test_hybrid_eltorito_add(tmpdir):
     indir = tmpdir.mkdir("eltoritotwofile")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     with open(os.path.join(str(indir), "aa"), 'wb') as outfp:
-        outfp.write("aa\n")
+        outfp.write(b"aa\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    iso = pyiso.PyIso()
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -726,16 +723,16 @@ def test_hybrid_rr_nofiles(tmpdir):
     indir = tmpdir.mkdir("rrnofiles")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    iso.rm_file("/FOO.;1")
+    iso.rm_file("/FOO.;1", rr_name="foo")
 
     do_a_test(tmpdir, iso, check_rr_nofiles)
 
@@ -748,13 +745,13 @@ def test_hybrid_rr_onefile(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1", "/foo")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1", rr_name="foo")
 
     do_a_test(tmpdir, iso, check_rr_onefile)
 
@@ -765,18 +762,18 @@ def test_hybrid_rr_rmfile(tmpdir):
     indir = tmpdir.mkdir("rrrmfile")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     with open(os.path.join(str(indir), "baz"), 'wb') as outfp:
-        outfp.write("baz\n")
+        outfp.write(b"baz\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    iso.rm_file("/BAZ.;1")
+    iso.rm_file("/BAZ.;1", rr_name="baz")
 
     do_a_test(tmpdir, iso, check_rr_onefile)
 
@@ -787,16 +784,16 @@ def test_hybrid_rr_onefileonedir(tmpdir):
     indir = tmpdir.mkdir("rronefileonedir")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    iso.add_directory("/DIR1", rr_path="/dir1")
+    iso.add_directory("/DIR1", rr_name="dir1")
 
     do_a_test(tmpdir, iso, check_rr_onefileonedir)
 
@@ -810,16 +807,16 @@ def test_hybrid_rr_onefileonedirwithfile(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1", "/foo")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1", rr_name="foo")
 
-    barstr = "bar\n"
-    iso.add_fp(StringIO.StringIO(barstr), len(barstr), "/DIR1/BAR.;1", "/dir1/bar")
+    barstr = b"bar\n"
+    iso.add_fp(BytesIO(barstr), len(barstr), "/DIR1/BAR.;1", rr_name="bar")
 
     do_a_test(tmpdir, iso, check_rr_onefileonedirwithfile)
 
@@ -830,16 +827,16 @@ def test_hybrid_rr_and_joliet_nofiles(tmpdir):
     indir = tmpdir.mkdir("rrjolietnofiles")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-rational-rock", "-J", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    iso.rm_file('/FOO.;1', joliet_path="/foo")
+    iso.rm_file('/FOO.;1', rr_name="foo", joliet_path="/foo")
 
     do_a_test(tmpdir, iso, check_joliet_and_rr_nofiles)
 
@@ -852,13 +849,13 @@ def test_hybrid_rr_and_joliet_onefile(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-rational-rock", "-J", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1", rr_path="/foo", joliet_path="/foo")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1", rr_name="foo", joliet_path="/foo")
 
     do_a_test(tmpdir, iso, check_joliet_and_rr_onefile)
 
@@ -869,12 +866,12 @@ def test_hybrid_rr_and_eltorito_nofiles(tmpdir):
     indir = tmpdir.mkdir("rreltoritonofiles")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -891,13 +888,13 @@ def test_hybrid_rr_and_eltorito_nofiles2(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    bootstr = "boot\n"
-    iso.add_fp(StringIO.StringIO(bootstr), len(bootstr), "/BOOT.;1", rr_path="/boot")
+    bootstr = b"boot\n"
+    iso.add_fp(BytesIO(bootstr), len(bootstr), "/BOOT.;1", rr_name="boot")
     iso.add_eltorito("/BOOT.;1", "/BOOT.CAT;1")
 
     do_a_test(tmpdir, iso, check_rr_and_eltorito_nofiles)
@@ -911,17 +908,17 @@ def test_hybrid_rr_and_eltorito_onefile(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    bootstr = "boot\n"
-    iso.add_fp(StringIO.StringIO(bootstr), len(bootstr), "/BOOT.;1", rr_path="/boot")
+    bootstr = b"boot\n"
+    iso.add_fp(BytesIO(bootstr), len(bootstr), "/BOOT.;1", rr_name="boot")
     iso.add_eltorito("/BOOT.;1", "/BOOT.CAT;1")
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1", rr_path="/foo")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1", rr_name="foo")
 
     do_a_test(tmpdir, iso, check_rr_and_eltorito_onefile)
 
@@ -932,17 +929,17 @@ def test_hybrid_rr_and_eltorito_onefile2(tmpdir):
     indir = tmpdir.mkdir("rreltoritoonefile2")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    bootstr = "boot\n"
-    iso.add_fp(StringIO.StringIO(bootstr), len(bootstr), "/BOOT.;1", rr_path="/boot")
+    bootstr = b"boot\n"
+    iso.add_fp(BytesIO(bootstr), len(bootstr), "/BOOT.;1", rr_name="boot")
     iso.add_eltorito("/BOOT.;1", "/BOOT.CAT;1")
 
     do_a_test(tmpdir, iso, check_rr_and_eltorito_onefile)
@@ -954,18 +951,18 @@ def test_hybrid_rr_and_eltorito_onefile3(tmpdir):
     indir = tmpdir.mkdir("rreltoritoonefile3")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1", rr_path="/foo")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1", rr_name="foo")
 
     do_a_test(tmpdir, iso, check_rr_and_eltorito_onefile)
 
@@ -978,16 +975,16 @@ def test_hybrid_rr_and_eltorito_onedir(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    bootstr = "boot\n"
-    iso.add_fp(StringIO.StringIO(bootstr), len(bootstr), "/BOOT.;1", rr_path="/boot")
+    bootstr = b"boot\n"
+    iso.add_fp(BytesIO(bootstr), len(bootstr), "/BOOT.;1", rr_name="boot")
     iso.add_eltorito("/BOOT.;1", "/BOOT.CAT;1")
 
-    iso.add_directory("/DIR1", rr_path="/dir1")
+    iso.add_directory("/DIR1", rr_name="dir1")
 
     do_a_test(tmpdir, iso, check_rr_and_eltorito_onedir)
 
@@ -1000,15 +997,15 @@ def test_hybrid_rr_and_eltorito_onedir2(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    iso.add_directory("/DIR1", rr_path="/dir1")
+    iso.add_directory("/DIR1", rr_name="dir1")
 
-    bootstr = "boot\n"
-    iso.add_fp(StringIO.StringIO(bootstr), len(bootstr), "/BOOT.;1", rr_path="/boot")
+    bootstr = b"boot\n"
+    iso.add_fp(BytesIO(bootstr), len(bootstr), "/BOOT.;1", rr_name="boot")
     iso.add_eltorito("/BOOT.;1", "/BOOT.CAT;1")
 
     do_a_test(tmpdir, iso, check_rr_and_eltorito_onedir)
@@ -1023,13 +1020,13 @@ def test_hybrid_rr_and_eltorito_onedir3(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    bootstr = "boot\n"
-    iso.add_fp(StringIO.StringIO(bootstr), len(bootstr), "/BOOT.;1", rr_path="/boot")
+    bootstr = b"boot\n"
+    iso.add_fp(BytesIO(bootstr), len(bootstr), "/BOOT.;1", rr_name="boot")
     iso.add_eltorito("/BOOT.;1", "/BOOT.CAT;1")
 
     do_a_test(tmpdir, iso, check_rr_and_eltorito_onedir)
@@ -1041,17 +1038,17 @@ def test_hybrid_rr_and_eltorito_onedir4(tmpdir):
     indir = tmpdir.mkdir("rreltoritoonedir4")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    iso.add_directory("/DIR1", rr_path="/dir1")
+    iso.add_directory("/DIR1", rr_name="dir1")
 
     do_a_test(tmpdir, iso, check_rr_and_eltorito_onedir)
 
@@ -1062,18 +1059,18 @@ def test_hybrid_rr_and_eltorito_rmdir(tmpdir):
     indir = tmpdir.mkdir("rreltoritormdir")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     indir.mkdir("dir1")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    iso.rm_directory("/DIR1")
+    iso.rm_directory("/DIR1", rr_name="dir1")
 
     do_a_test(tmpdir, iso, check_rr_and_eltorito_nofiles)
 
@@ -1084,19 +1081,19 @@ def test_hybrid_rr_and_eltorito_rmdir2(tmpdir):
     indir = tmpdir.mkdir("rreltoritormdir2")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     dir1 = indir.mkdir("dir1")
     dir1.mkdir("subdir1")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    iso.rm_directory("/DIR1/SUBDIR1")
+    iso.rm_directory("/DIR1/SUBDIR1", rr_name="subdir1")
 
     do_a_test(tmpdir, iso, check_rr_and_eltorito_onedir)
 
@@ -1107,13 +1104,13 @@ def test_hybrid_joliet_and_eltorito_remove(tmpdir):
     indir = tmpdir.mkdir("jolieteltoritoremove")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
                      "-J", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -1130,18 +1127,18 @@ def test_hybrid_joliet_and_eltorito_onefile(tmpdir):
     indir = tmpdir.mkdir("jolieteltoritoonefile")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
                      "-J", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1", joliet_path="/foo")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1", joliet_path="/foo")
 
     do_a_test(tmpdir, iso, check_joliet_and_eltorito_onefile)
 
@@ -1154,16 +1151,16 @@ def test_hybrid_joliet_and_eltorito_onefile2(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-J", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    bootstr = "boot\n"
-    iso.add_fp(StringIO.StringIO(bootstr), len(bootstr), "/BOOT.;1", joliet_path="/boot")
+    bootstr = b"boot\n"
+    iso.add_fp(BytesIO(bootstr), len(bootstr), "/BOOT.;1", joliet_path="/boot")
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1", joliet_path="/foo")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1", joliet_path="/foo")
 
     iso.add_eltorito("/BOOT.;1", "/BOOT.CAT;1")
 
@@ -1176,17 +1173,17 @@ def test_hybrid_joliet_and_eltorito_onefile3(tmpdir):
     indir = tmpdir.mkdir("jolieteltoritoonefile3")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-J", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    bootstr = "boot\n"
-    iso.add_fp(StringIO.StringIO(bootstr), len(bootstr), "/BOOT.;1", joliet_path="/boot")
+    bootstr = b"boot\n"
+    iso.add_fp(BytesIO(bootstr), len(bootstr), "/BOOT.;1", joliet_path="/boot")
 
     iso.add_eltorito("/BOOT.;1", "/BOOT.CAT;1")
 
@@ -1202,13 +1199,13 @@ def test_hybrid_joliet_and_eltorito_onedir(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-J", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    bootstr = "boot\n"
-    iso.add_fp(StringIO.StringIO(bootstr), len(bootstr), "/BOOT.;1", joliet_path="/boot")
+    bootstr = b"boot\n"
+    iso.add_fp(BytesIO(bootstr), len(bootstr), "/BOOT.;1", joliet_path="/boot")
 
     iso.add_eltorito("/BOOT.;1", "/BOOT.CAT;1")
 
@@ -1221,13 +1218,13 @@ def test_hybrid_joliet_and_eltorito_onedir2(tmpdir):
     indir = tmpdir.mkdir("jolieteltoritoonedir2")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
                      "-J", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -1244,20 +1241,18 @@ def test_hybrid_isohybrid(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    iso = pyiso.PyIso()
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
     # Add Eltorito
-    isolinux_fp = open('/usr/share/syslinux/isolinux.bin', 'rb')
-    iso.add_fp(isolinux_fp, os.fstat(isolinux_fp.fileno()).st_size, "/ISOLINUX.BIN;1")
+    isolinuxstr = b'\x00'*0x40 + b'\xfb\xc0\x78\x70'
+    iso.add_fp(BytesIO(isolinuxstr), len(isolinuxstr), "/ISOLINUX.BIN;1")
     iso.add_eltorito("/ISOLINUX.BIN;1", "/BOOT.CAT;1", boot_load_size=4)
     # Now add the syslinux
-    iso.add_isohybrid('/usr/share/syslinux/isohdpfx.bin')
+    iso.add_isohybrid()
 
     do_a_test(tmpdir, iso, check_isohybrid)
-
-    isolinux_fp.close()
 
     iso.close()
 
@@ -1265,18 +1260,20 @@ def test_hybrid_isohybrid2(tmpdir):
     # First set things up, and generate the ISO with genisoimage.
     indir = tmpdir.mkdir("isohybrid")
     outfile = str(indir)+".iso"
-    shutil.copyfile('/usr/share/syslinux/isolinux.bin', os.path.join(str(indir), 'isolinux.bin'))
+    with open(os.path.join(str(indir), "isolinux.bin"), 'wb') as outfp:
+        outfp.seek(0x40)
+        outfp.write(b'\xfb\xc0\x78\x70')
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-c", "boot.cat", "-b", "isolinux.bin", "-no-emul-boot",
                      "-boot-load-size", "4",
                      "-o", str(outfile), str(indir)])
 
-    iso = pyiso.PyIso()
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
     # Now add the syslinux
-    iso.add_isohybrid('/usr/share/syslinux/isohdpfx.bin')
+    iso.add_isohybrid()
 
     do_a_test(tmpdir, iso, check_isohybrid)
 
@@ -1286,14 +1283,16 @@ def test_hybrid_isohybrid3(tmpdir):
     # First set things up, and generate the ISO with genisoimage.
     indir = tmpdir.mkdir("isohybrid")
     outfile = str(indir)+".iso"
-    shutil.copyfile('/usr/share/syslinux/isolinux.bin', os.path.join(str(indir), 'isolinux.bin'))
+    with open(os.path.join(str(indir), "isolinux.bin"), 'wb') as outfp:
+        outfp.seek(0x40)
+        outfp.write(b'\xfb\xc0\x78\x70')
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-c", "boot.cat", "-b", "isolinux.bin", "-no-emul-boot",
                      "-boot-load-size", "4",
                      "-o", str(outfile), str(indir)])
     subprocess.call(["isohybrid", "-v", str(outfile)])
 
-    iso = pyiso.PyIso()
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -1311,19 +1310,19 @@ def test_hybrid_joliet_rr_and_eltorito_nofiles(tmpdir):
     indir = tmpdir.mkdir("jolietrreltoritonofiles")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
                      "-J", "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    iso.rm_file("/FOO.;1", joliet_path="/foo")
+    iso.rm_file("/FOO.;1", joliet_path="/foo", rr_name="foo")
 
     do_a_test(tmpdir, iso, check_joliet_rr_and_eltorito_nofiles)
 
@@ -1336,13 +1335,13 @@ def test_hybrid_joliet_rr_and_eltorito_nofiles2(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-J", "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    bootstr = "boot\n"
-    iso.add_fp(StringIO.StringIO(bootstr), len(bootstr), "/BOOT.;1", rr_path="/boot", joliet_path="/boot")
+    bootstr = b"boot\n"
+    iso.add_fp(BytesIO(bootstr), len(bootstr), "/BOOT.;1", rr_name="boot", joliet_path="/boot")
 
     iso.add_eltorito("/BOOT.;1", "/BOOT.CAT;1")
 
@@ -1355,18 +1354,18 @@ def test_hybrid_joliet_rr_and_eltorito_onefile(tmpdir):
     indir = tmpdir.mkdir("jolietrreltoritoonefile")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
                      "-J", "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1", rr_path="/foo", joliet_path="/foo")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1", rr_name="foo", joliet_path="/foo")
 
     do_a_test(tmpdir, iso, check_joliet_rr_and_eltorito_onefile)
 
@@ -1377,17 +1376,17 @@ def test_hybrid_joliet_rr_and_eltorito_onefile2(tmpdir):
     indir = tmpdir.mkdir("jolietrreltoritoonefile2")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-J", "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    bootstr = "boot\n"
-    iso.add_fp(StringIO.StringIO(bootstr), len(bootstr), "/BOOT.;1", rr_path="/boot", joliet_path="/boot")
+    bootstr = b"boot\n"
+    iso.add_fp(BytesIO(bootstr), len(bootstr), "/BOOT.;1", rr_name="boot", joliet_path="/boot")
 
     iso.add_eltorito("/BOOT.;1", "/BOOT.CAT;1")
 
@@ -1402,16 +1401,16 @@ def test_hybrid_joliet_rr_and_eltorito_onefile3(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-J", "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1", rr_path="/foo", joliet_path="/foo")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1", rr_name="foo", joliet_path="/foo")
 
-    bootstr = "boot\n"
-    iso.add_fp(StringIO.StringIO(bootstr), len(bootstr), "/BOOT.;1", rr_path="/boot", joliet_path="/boot")
+    bootstr = b"boot\n"
+    iso.add_fp(BytesIO(bootstr), len(bootstr), "/BOOT.;1", rr_name="boot", joliet_path="/boot")
 
     iso.add_eltorito("/BOOT.;1", "/BOOT.CAT;1")
 
@@ -1427,13 +1426,13 @@ def test_hybrid_joliet_rr_and_eltorito_onedir(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-J", "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    bootstr = "boot\n"
-    iso.add_fp(StringIO.StringIO(bootstr), len(bootstr), "/BOOT.;1", rr_path="/boot", joliet_path="/boot")
+    bootstr = b"boot\n"
+    iso.add_fp(BytesIO(bootstr), len(bootstr), "/BOOT.;1", rr_name="boot", joliet_path="/boot")
 
     iso.add_eltorito("/BOOT.;1", "/BOOT.CAT;1")
 
@@ -1448,17 +1447,17 @@ def test_hybrid_joliet_rr_and_eltorito_onedir2(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-J", "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    bootstr = "boot\n"
-    iso.add_fp(StringIO.StringIO(bootstr), len(bootstr), "/BOOT.;1", rr_path="/boot", joliet_path="/boot")
+    bootstr = b"boot\n"
+    iso.add_fp(BytesIO(bootstr), len(bootstr), "/BOOT.;1", rr_name="boot", joliet_path="/boot")
 
     iso.add_eltorito("/BOOT.;1", "/BOOT.CAT;1")
 
-    iso.add_directory("/DIR1", rr_path="/dir1", joliet_path="/dir1")
+    iso.add_directory("/DIR1", rr_name="dir1", joliet_path="/dir1")
 
     do_a_test(tmpdir, iso, check_joliet_rr_and_eltorito_onedir)
 
@@ -1469,17 +1468,17 @@ def test_hybrid_joliet_rr_and_eltorito_onedir3(tmpdir):
     indir = tmpdir.mkdir("jolietrreltoritoonedir2")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
                      "-J", "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    iso.add_directory("/DIR1", rr_path="/dir1", joliet_path="/dir1")
+    iso.add_directory("/DIR1", rr_name="dir1", joliet_path="/dir1")
 
     do_a_test(tmpdir, iso, check_joliet_rr_and_eltorito_onedir)
 
@@ -1490,16 +1489,16 @@ def test_hybrid_rr_rmfile2(tmpdir):
     indir = tmpdir.mkdir("rrrmfile2")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    iso.rm_file("/FOO.;1", rr_path="/foo")
+    iso.rm_file("/FOO.;1", rr_name="foo")
 
     do_a_test(tmpdir, iso, check_rr_nofiles)
 
@@ -1513,12 +1512,12 @@ def test_hybrid_rr_rmdir(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    iso.rm_directory("/DIR1", rr_path="/dir1")
+    iso.rm_directory("/DIR1", rr_name="dir1")
 
     do_a_test(tmpdir, iso, check_rr_nofiles)
 
@@ -1532,8 +1531,8 @@ def test_hybrid_xa_nofiles(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-xa", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -1548,12 +1547,12 @@ def test_hybrid_xa_nofiles2(tmpdir):
     indir = tmpdir.mkdir("xarmfile2")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-xa", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -1570,13 +1569,13 @@ def test_hybrid_xa_onefile(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-xa", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1")
 
     do_a_test(tmpdir, iso, check_xa_onefile)
 
@@ -1589,8 +1588,8 @@ def test_hybrid_xa_onedir(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-xa", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -1611,12 +1610,12 @@ def test_hybrid_sevendeepdirs(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-rational-rock", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    iso.rm_directory("/DIR1/DIR2/DIR3/DIR4/DIR5/DIR6/DIR7/DIR8")
+    iso.rm_directory("/DIR1/DIR2/DIR3/DIR4/DIR5/DIR6/DIR7/DIR8", rr_name="dir8")
 
     do_a_test(tmpdir, iso, check_sevendeepdirs)
 
@@ -1629,8 +1628,8 @@ def test_hybrid_xa_joliet_onedir(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-xa", "-J", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -1647,13 +1646,13 @@ def test_hybrid_xa_joliet_onefile(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-xa", "-J", "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1", joliet_path="/foo")
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1", joliet_path="/foo")
 
     do_a_test(tmpdir, iso, check_xa_joliet_onefile)
 
@@ -1664,14 +1663,14 @@ def test_hybrid_isolevel4_onefile(tmpdir):
     indir = tmpdir.mkdir("xarmfile2")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     with open(os.path.join(str(indir), "bar"), 'wb') as outfp:
-        outfp.write("bar\n")
+        outfp.write(b"bar\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "4", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -1686,13 +1685,13 @@ def test_hybrid_isolevel4_onefile2(tmpdir):
     indir = tmpdir.mkdir("xarmfile2")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     indir.mkdir('dir1')
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "4", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -1709,13 +1708,13 @@ def test_hybrid_isolevel4_eltorito(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "4", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    bootstr = "boot\n"
-    iso.add_fp(StringIO.StringIO(bootstr), len(bootstr), "/boot")
+    bootstr = b"boot\n"
+    iso.add_fp(BytesIO(bootstr), len(bootstr), "/boot")
 
     iso.add_eltorito("/boot", "/boot.cat")
 
@@ -1728,13 +1727,13 @@ def test_hybrid_isolevel4_eltorito2(tmpdir):
     indir = tmpdir.mkdir("isolevel4eltorito")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "4", "-no-pad",
                      "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
@@ -1750,18 +1749,18 @@ def test_hybrid_eltorito_multi_boot(tmpdir):
     indir = tmpdir.mkdir("eltoritonofiles")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "4", "-no-pad",
                      "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    boot2str = "boot2\n"
-    iso.add_fp(StringIO.StringIO(boot2str), len(boot2str), "/boot2")
+    boot2str = b"boot2\n"
+    iso.add_fp(BytesIO(boot2str), len(boot2str), "/boot2")
     iso.add_eltorito("/boot2", "/boot.cat")
 
     do_a_test(tmpdir, iso, check_eltorito_multi_boot)
@@ -1773,16 +1772,16 @@ def test_hybrid_modify_in_place_onefile(tmpdir):
     indir = tmpdir.mkdir("modifyinplaceonefile")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("f\n")
+        outfp.write(b"f\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.modify_file_in_place(StringIO.StringIO(foostr), len(foostr), "/FOO.;1", rr_path="/foo", joliet_path="/foo")
+    foostr = b"foo\n"
+    iso.modify_file_in_place(BytesIO(foostr), len(foostr), "/FOO.;1")
 
     do_a_test(tmpdir, iso, check_onefile)
 
@@ -1793,17 +1792,17 @@ def test_hybrid_joliet_modify_in_place_onefile(tmpdir):
     indir = tmpdir.mkdir("jolietmodifyinplaceonefile")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("f\n")
+        outfp.write(b"f\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-J",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.modify_file_in_place(StringIO.StringIO(foostr), len(foostr), "/FOO.;1", rr_path="/foo", joliet_path="/foo")
+    foostr = b"foo\n"
+    iso.modify_file_in_place(BytesIO(foostr), len(foostr), "/FOO.;1", joliet_path="/foo")
 
     do_a_test(tmpdir, iso, check_joliet_onefile)
 
@@ -1814,17 +1813,17 @@ def test_hybrid_modify_in_place_iso_level4_onefile(tmpdir):
     indir = tmpdir.mkdir("modifyinplaceisolevel4onefile")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("f\n")
+        outfp.write(b"f\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "4", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    foostr = "foo\n"
-    iso.modify_file_in_place(StringIO.StringIO(foostr), len(foostr), "/foo", rr_path="/foo", joliet_path="/foo")
+    foostr = b"foo\n"
+    iso.modify_file_in_place(BytesIO(foostr), len(foostr), "/foo")
 
     do_a_test(tmpdir, iso, check_isolevel4_onefile)
 
@@ -1835,15 +1834,15 @@ def test_hybrid_try_to_use_new_on_open_file(tmpdir):
     indir = tmpdir.mkdir("modifyinplaceisolevel4onefile")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("f\n")
+        outfp.write(b"f\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "4", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    iso = pyiso.PyIso()
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    with pytest.raises(pyiso.PyIsoException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
         iso.new()
 
     iso.close()
@@ -1853,13 +1852,13 @@ def test_hybrid_try_to_use_open_on_new_file(tmpdir):
     indir = tmpdir.mkdir("modifyinplaceisolevel4onefile")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("f\n")
+        outfp.write(b"f\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "4", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    iso = pyiso.PyIso()
+    iso = pycdlib.PyCdlib()
     iso.new()
-    with pytest.raises(pyiso.PyIsoException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
         iso.open(str(outfile))
 
     iso.close()
@@ -1869,35 +1868,35 @@ def test_hybrid_modify_in_place_not_initialized(tmpdir):
     indir = tmpdir.mkdir("modifyinplaceonefile")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("f\n")
+        outfp.write(b"f\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
-    foostr = "foo\n"
-    with pytest.raises(pyiso.PyIsoException):
-        iso.modify_file_in_place(StringIO.StringIO(foostr), len(foostr), "/FOO.;1", rr_path="/foo", joliet_path="/foo")
+    foostr = b"foo\n"
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+        iso.modify_file_in_place(BytesIO(foostr), len(foostr), "/FOO.;1", rr_name="foo", joliet_path="/foo")
 
 def test_hybrid_modify_in_place_read_only(tmpdir):
     # First set things up, and generate the ISO with genisoimage.
     indir = tmpdir.mkdir("modifyinplaceonefile")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("f\n")
+        outfp.write(b"f\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     with open(str(outfile), 'rb') as fp:
         iso.open_fp(fp)
 
-        foostr = "foo\n"
-        with pytest.raises(pyiso.PyIsoException):
-            iso.modify_file_in_place(StringIO.StringIO(foostr), len(foostr), "/FOO.;1", rr_path="/foo", joliet_path="/foo")
+        foostr = b"foo\n"
+        with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+            iso.modify_file_in_place(BytesIO(foostr), len(foostr), "/FOO.;1", rr_name="foo", joliet_path="/foo")
 
         iso.close()
 
@@ -1906,20 +1905,20 @@ def test_hybrid_add_isohybrid_file_wrong_size(tmpdir):
     indir = tmpdir.mkdir("modifyinplaceonefile")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    with open(os.path.join(str(indir), 'file.bin'), 'w') as outfp:
-        outfp.write("file")
+    with open(os.path.join(str(indir), 'file.bin'), 'wb') as outfp:
+        outfp.write(b"file")
 
-    with pytest.raises(pyiso.PyIsoException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
         iso.add_isohybrid(os.path.join(str(indir), 'file.bin'))
 
     iso.close()
@@ -1931,12 +1930,12 @@ def test_hybrid_add_isohybrid_no_eltorito(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    with pytest.raises(pyiso.PyIsoException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
         iso.add_isohybrid('/usr/share/syslinux/isohdpfx.bin')
 
     iso.close()
@@ -1946,15 +1945,15 @@ def test_hybrid_eltorito_remove_not_initialized(tmpdir):
     indir = tmpdir.mkdir("eltoritonofiles")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pyiso.PyIsoException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
         iso.rm_eltorito()
 
 def test_hybrid_eltorito_remove_not_present(tmpdir):
@@ -1962,16 +1961,16 @@ def test_hybrid_eltorito_remove_not_present(tmpdir):
     indir = tmpdir.mkdir("eltoritonofiles")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    with pytest.raises(pyiso.PyIsoException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
         iso.rm_eltorito()
 
     iso.close()
@@ -1981,15 +1980,15 @@ def test_hybrid_rmdir_not_initialized(tmpdir):
     indir = tmpdir.mkdir("rmdir")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     indir.mkdir("dir1")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pyiso.PyIsoException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
         iso.rm_directory("/DIR1")
 
 def test_hybrid_rmdir_slash(tmpdir):
@@ -1997,17 +1996,17 @@ def test_hybrid_rmdir_slash(tmpdir):
     indir = tmpdir.mkdir("rmdir")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     indir.mkdir("dir1")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    with pytest.raises(pyiso.PyIsoException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
         iso.rm_directory("/")
 
     iso.close()
@@ -2017,17 +2016,17 @@ def test_hybrid_rmdir_not_dir(tmpdir):
     indir = tmpdir.mkdir("rmdir")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     indir.mkdir("dir1")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    with pytest.raises(pyiso.PyIsoException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
         iso.rm_directory("/FOO.;1")
 
     iso.close()
@@ -2037,19 +2036,19 @@ def test_hybrid_rmdir_not_empty(tmpdir):
     indir = tmpdir.mkdir("rmdir")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
-        outfp.write("foo\n")
+        outfp.write(b"foo\n")
     dir1 = indir.mkdir("dir1")
-    with open(os.path.join(str(dir1), "bar"), "wb") as outfp:
-        outfp.write("bar\n")
+    with open(os.path.join(str(dir1), "bar"), 'wb') as outfp:
+        outfp.write(b"bar\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    with pytest.raises(pyiso.PyIsoException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
         iso.rm_directory("/DIR1")
 
     iso.close()
@@ -2059,14 +2058,14 @@ def test_hybrid_rmfile_not_initialized(tmpdir):
     indir = tmpdir.mkdir("jolieteltoritoremove")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pyiso.PyIsoException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
         iso.rm_file("/BOOT.;1")
 
 def test_hybrid_rmfile_bad_filename(tmpdir):
@@ -2074,16 +2073,16 @@ def test_hybrid_rmfile_bad_filename(tmpdir):
     indir = tmpdir.mkdir("jolieteltoritoremove")
     outfile = str(indir)+".iso"
     with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
-        outfp.write("boot\n")
+        outfp.write(b"boot\n")
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    with pytest.raises(pyiso.PyIsoException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
         iso.rm_file("BOOT.;1")
 
     iso.close()
@@ -2096,12 +2095,12 @@ def test_hybrid_rmfile_not_file(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
     iso.open(str(outfile))
 
-    with pytest.raises(pyiso.PyIsoException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
         iso.rm_file("/DIR1")
 
     iso.close()
@@ -2113,10 +2112,10 @@ def test_hybrid_add_directory_not_initialized(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pyiso.PyIsoException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
         iso.add_directory("/DIR1")
 
 def test_hybrid_addfile_not_initialized(tmpdir):
@@ -2126,9 +2125,263 @@ def test_hybrid_addfile_not_initialized(tmpdir):
     subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
                      "-o", str(outfile), str(indir)])
 
-    # Now open up the ISO with pyiso and check some things out.
-    iso = pyiso.PyIso()
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
 
-    foostr = "foo\n"
-    with pytest.raises(pyiso.PyIsoException):
-        iso.add_fp(StringIO.StringIO(foostr), len(foostr), "/FOO.;1")
+    foostr = b"foo\n"
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+        iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1")
+
+def test_hybrid_modify_in_place_bad_path(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("modifyinplaceisolevel4onefile")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
+        outfp.write(b"f\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "4", "-no-pad",
+                     "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    foostr = b"foo\n"
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+        iso.modify_file_in_place(BytesIO(foostr), len(foostr), "foo", rr_name="foo", joliet_path="/foo")
+
+    iso.close()
+
+def test_hybrid_modify_in_place_grow_file(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("modifyinplaceisolevel4onefile")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
+        outfp.write(b"f\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "4", "-no-pad",
+                     "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    foostr = b"f"*2049
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+        iso.modify_file_in_place(BytesIO(foostr), len(foostr), "/foo")
+
+    iso.close()
+
+def test_hybrid_modify_in_place_modify_dir(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("modifyinplaceisolevel4onefile")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
+        outfp.write(b"f\n")
+    indir.mkdir('dir1')
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "4", "-no-pad",
+                     "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    foostr = b"foo\n"
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+        iso.modify_file_in_place(BytesIO(foostr), len(foostr), "/dir1")
+
+    iso.close()
+
+def test_hybrid_joliet_isolevel4(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("jolietisolevel4")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
+        outfp.write(b"foo\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "4", "-no-pad",
+                     "-J", "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    iso.add_directory("/dir1", joliet_path="/dir1")
+
+    do_a_test(tmpdir, iso, check_joliet_isolevel4)
+
+    iso.close()
+
+def test_hybrid_joliet_isolevel4_2(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("jolietisolevel4")
+    outfile = str(indir)+".iso"
+    indir.mkdir('dir1')
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "4", "-no-pad",
+                     "-J", "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/foo", joliet_path="/foo")
+
+    do_a_test(tmpdir, iso, check_joliet_isolevel4)
+
+    iso.close()
+
+def test_hybrid_joliet_isolevel4_3(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("jolietisolevel4")
+    outfile = str(indir)+".iso"
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "4", "-no-pad",
+                     "-J", "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/foo", joliet_path="/foo")
+
+    iso.add_directory("/dir1", joliet_path="/dir1")
+
+    do_a_test(tmpdir, iso, check_joliet_isolevel4)
+
+    iso.close()
+
+def test_hybrid_eltorito_remove_with_dir(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("eltoritonofiles")
+    outfile = str(indir)+".iso"
+    indir.mkdir('a')
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"boot\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
+                     "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    iso.rm_eltorito()
+    iso.rm_file("/BOOT.;1")
+    iso.rm_directory('/A')
+
+    do_a_test(tmpdir, iso, check_nofiles)
+
+    iso.close()
+
+def test_hybrid_modify_in_place_dirrecord_spillover(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("modifyinplaceonefile")
+    outfile = str(indir)+".iso"
+    dir1 = indir.mkdir("dir1")
+    for i in range(1, 49):
+        fname = os.path.join(str(dir1), "foo%.2d" % (i))
+        with open(fname, 'wb') as outfp:
+            outfp.write(b"f\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+    iso.open(str(outfile))
+
+    foostr = b"foo\n"
+    iso.modify_file_in_place(BytesIO(foostr), len(foostr), "/DIR1/FOO48.;1")
+
+    do_a_test(tmpdir, iso, check_modify_in_place_spillover)
+
+    iso.close()
+
+def test_hybrid_modify_in_place_dirrecord_spillover2(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("modifyinplaceonefile")
+    outfile = str(indir)+".iso"
+    dir1 = indir.mkdir("dir1")
+    for i in range(1, 49):
+        fname = os.path.join(str(dir1), "foo%.2d" % (i))
+        with open(fname, 'wb') as outfp:
+            outfp.write(b"f\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+    iso.open(str(outfile))
+
+    foostr = b"foo\n"
+    iso.modify_file_in_place(BytesIO(foostr), len(foostr), "/DIR1/FOO40.;1")
+
+    do_a_test(tmpdir, iso, check_modify_in_place_spillover)
+
+    iso.close()
+
+def test_hybrid_shuffle_deep(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("rrdeepreshuffle")
+    outfile = str(indir)+".iso"
+    indir.mkdir('dir1').mkdir('dir2').mkdir('dir3').mkdir('dir4').mkdir('dir5').mkdir('dir6').mkdir('dir7').mkdir('dir8')
+    with open(os.path.join(str(indir), 'dir1', 'dir2', 'dir3', 'dir4', 'dir5', 'dir6', 'dir7', 'dir8', 'foo'), 'wb') as outfp:
+        outfp.write(b"foo\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-rational-rock",
+                     "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    # Before making changes, save off the extent location of DIR1
+    dir1 = iso.pvd.root_dir_record.children[2]
+    assert(dir1.file_identifier() == b"DIR1")
+
+    rr_moved = iso.pvd.root_dir_record.children[3]
+    assert(rr_moved.file_identifier() == b"RR_MOVED")
+
+    dir8_rr = rr_moved.children[2]
+    assert(dir8_rr.file_identifier() == b"DIR8")
+    assert(dir8_rr.rock_ridge.rr_record is not None)
+    orig_pl = dir8_rr.children[1].rock_ridge.pl_record.parent_log_block_num
+
+    dir2 = dir1.children[2]
+    assert(dir2.file_identifier() == b"DIR2")
+
+    dir3 = dir2.children[2]
+    assert(dir3.file_identifier() == b"DIR3")
+
+    dir4 = dir3.children[2]
+    assert(dir4.file_identifier() == b"DIR4")
+
+    dir5 = dir4.children[2]
+    assert(dir5.file_identifier() == b"DIR5")
+
+    dir6 = dir5.children[2]
+    assert(dir6.file_identifier() == b"DIR6")
+
+    dir7 = dir6.children[2]
+    assert(dir7.file_identifier() == b"DIR7")
+
+    dir8 = dir7.children[2]
+    assert(dir8.file_identifier() == b"DIR8")
+
+    assert(dir8.rock_ridge.cl_record is not None)
+    orig_cl = dir8.rock_ridge.cl_record.child_log_block_num
+
+    iso.add_directory("/A", rr_name="a")
+
+    new_cl = dir8.rock_ridge.cl_record.child_log_block_num
+    assert(orig_cl != new_cl)
+
+    new_pl = dir8_rr.children[1].rock_ridge.pl_record.parent_log_block_num
+    assert(orig_pl != new_pl)
+
+    iso.close()
