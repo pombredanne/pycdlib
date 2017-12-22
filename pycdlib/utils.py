@@ -20,8 +20,10 @@ Various utilities for PyCdlib.
 
 from __future__ import absolute_import
 
-import socket
 import io
+import socket
+
+import pycdlib.pycdlibexception as pycdlibexception
 
 have_sendfile = True
 try:
@@ -32,7 +34,6 @@ except ImportError:
     except ImportError:
         have_sendfile = False
 
-import pycdlib.pycdlibexception as pycdlibexception
 
 def swab_32bit(input_int):
     '''
@@ -45,6 +46,7 @@ def swab_32bit(input_int):
     '''
     return socket.htonl(input_int)
 
+
 def swab_16bit(input_int):
     '''
     A function to swab a 16-bit integer.
@@ -55,6 +57,7 @@ def swab_16bit(input_int):
      The swabbed version of the 16-bit integer.
     '''
     return socket.htons(input_int)
+
 
 def ceiling_div(numer, denom):
     '''
@@ -71,6 +74,7 @@ def ceiling_div(numer, denom):
     # floor division to make this happen.
     # See https://stackoverflow.com/questions/14822184/is-there-a-ceiling-equivalent-of-operator-in-python.
     return -(-numer // denom)
+
 
 def copy_data(data_length, blocksize, infp, outfp):
     '''
@@ -93,8 +97,8 @@ def copy_data(data_length, blocksize, infp, outfp):
         # available.  Instead, we try to assign it, and if we fail, then we
         # assume it is not available.
         try:
-            x_unused = infp.fileno()
-            y_unused = outfp.fileno()
+            x_unused = infp.fileno()  # NOQA
+            y_unused = outfp.fileno()  # NOQA
             use_sendfile = True
         except (AttributeError, io.UnsupportedOperation):
             pass
@@ -120,9 +124,10 @@ def copy_data(data_length, blocksize, infp, outfp):
                 readsize = left
             data = infp.read(readsize)
             if len(data) != readsize:
-                raise pycdlibexception.PyCdlibException("Failed to read expected bytes")
+                raise pycdlibexception.PyCdlibInternalError("Failed to read expected bytes")
             outfp.write(data)
             left -= readsize
+
 
 def encode_space_pad(instr, length, encoding):
     '''
@@ -139,7 +144,7 @@ def encode_space_pad(instr, length, encoding):
     '''
     output = instr.decode('utf-8').encode(encoding)
     if len(output) > length:
-        raise pycdlibexception.PyCdlibException("Input string too long!")
+        raise pycdlibexception.PyCdlibInvalidInput("Input string too long!")
 
     encoded_space = ' '.encode(encoding)
 
@@ -152,6 +157,7 @@ def encode_space_pad(instr, length, encoding):
         output = output[:left]
 
     return output
+
 
 def normpath(path):
     """
@@ -190,7 +196,7 @@ def normpath(path):
             new_comps.pop()
     comps = new_comps
     path = sep.join(comps)
-    path = sep*initial_slashes + path
+    path = sep * initial_slashes + path
     if not isinstance(path, bytes):
         path = path.encode('utf-8')
     if not isinstance(dot, bytes):

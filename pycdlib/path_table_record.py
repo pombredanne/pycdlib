@@ -1,4 +1,4 @@
-# Copyright (C) 2015-2016  Chris Lalancette <clalancette@gmail.com>
+# Copyright (C) 2015-2017  Chris Lalancette <clalancette@gmail.com>
 
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -25,22 +25,22 @@ import struct
 import pycdlib.pycdlibexception as pycdlibexception
 import pycdlib.utils as utils
 
+
 class PathTableRecord(object):
     '''
     A class that represents a single ISO9660 Path Table Record.
     '''
-    FMT = b"=BBLH"
+    FMT = "=BBLH"
 
     def __init__(self):
-        self.initialized = False
+        self._initialized = False
 
-    def parse(self, data, directory_num):
+    def parse(self, data):
         '''
         A method to parse an ISO9660 Path Table Record out of a string.
 
         Parameters:
          data - The string to parse.
-         directory_num - The directory number to assign to this path table record.
         Returns:
          Nothing.
         '''
@@ -52,8 +52,7 @@ class PathTableRecord(object):
         else:
             self.directory_identifier = data[8:]
         self.dirrecord = None
-        self.directory_num = directory_num
-        self.initialized = True
+        self._initialized = True
 
     def _record(self, ext_loc, parent_dir_num):
         '''
@@ -67,7 +66,7 @@ class PathTableRecord(object):
          A string representing this Path Table Record.
         '''
         return struct.pack(self.FMT, self.len_di, self.xattr_length,
-                           ext_loc, parent_dir_num) + self.directory_identifier + b'\x00'*(self.len_di % 2)
+                           ext_loc, parent_dir_num) + self.directory_identifier + b'\x00' * (self.len_di % 2)
 
     def record_little_endian(self):
         '''
@@ -79,8 +78,8 @@ class PathTableRecord(object):
         Returns:
          A string representing the little endian version of this Path Table Record.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Path Table Record not yet initialized")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Path Table Record not yet initialized")
 
         return self._record(self.extent_location, self.parent_directory_num)
 
@@ -94,8 +93,8 @@ class PathTableRecord(object):
         Returns:
          A string representing the big endian version of this Path Table Record.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Path Table Record not yet initialized")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Path Table Record not yet initialized")
 
         return self._record(utils.swab_32bit(self.extent_location),
                             utils.swab_16bit(self.parent_directory_num))
@@ -103,198 +102,92 @@ class PathTableRecord(object):
     @classmethod
     def record_length(cls, len_di):
         '''
-        A class method to calculate the length of this Path Table Record.
+        A class method to calculate the length of a Path Table Record.
+
+        Parameters:
+         len_di - The length of the name for this Path Directory Record.
+        Returns:
+         The total length that a Path Directory Record with this name would occupy.
         '''
-        # This method can be called even if the object isn't initialized
         return struct.calcsize(cls.FMT) + len_di + (len_di % 2)
 
-    def _new(self, name, dirrecord, parent_dir_num, depth):
+    def _new(self, name, parent_dir_num):
         '''
         An internal method to create a new Path Table Record.
 
         Parameters:
          name - The name for this Path Table Record.
-         dirrecord - The directory record to associate with this Path Table Record.
          parent_dir_num - The directory number of the parent of this Path Table
                           Record.
         Returns:
          Nothing.
         '''
         self.len_di = len(name)
-        self.xattr_length = 0 # FIXME: we don't support xattr for now
+        self.xattr_length = 0  # FIXME: we don't support xattr for now
         self.extent_location = 0
-        self.parent_directory_num = parent_dir_num
+        if parent_dir_num is None:
+            self.parent_directory_num = 1
+        else:
+            self.parent_directory_num = parent_dir_num
         self.directory_identifier = name
-        self.dirrecord = dirrecord
-        self.depth = depth
-        self.directory_num = None # This will get set later
-        self.initialized = True
+        self._initialized = True
 
-    def new_root(self, dirrecord):
+    def new_root(self):
         '''
         A method to create a new root Path Table Record.
 
         Parameters:
-         dirrecord - The directory record to associate with this Path Table Record.
+         None.
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("Path Table Record already initialized")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Path Table Record already initialized")
 
-        self._new(b"\x00", dirrecord, 1, 1)
+        self._new(b"\x00", None)
 
-    def new_dir(self, name, dirrecord, parent_dir_num, depth):
+    def new_dir(self, name):
         '''
         A method to create a new Path Table Record.
 
         Parameters:
          name - The name for this Path Table Record.
-         dirrecord - The directory record to associate with this Path Table Record.
-         parent_dir_num - The directory number of the parent of this Path Table
-                          Record.
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("Path Table Record already initialized")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Path Table Record already initialized")
 
-        self._new(name, dirrecord, parent_dir_num, depth)
+        # Zero for the parent dir num is bogus, but that will get fixed later.
+        self._new(name, 0)
 
-    def set_dirrecord(self, dirrecord):
+    def update_extent_location(self, extent_loc):
         '''
-        A method to set the directory record associated with this Path Table
-        Record.
+        A method to update the extent location for this Path Table Record.
 
         Parameters:
-         dirrecord - The directory record to associate with this Path Table Record.
+         extent_loc - The new extent location.
         Returns:
          Nothing.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Path Table Record not yet initialized")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Path Table Record not yet initialized")
 
-        self.dirrecord = dirrecord
+        self.extent_location = extent_loc
 
-    def update_extent_location_from_dirrecord(self):
-        '''
-        A method to update the extent location for this Path Table Record from
-        the corresponding directory record.
-
-        Parameters:
-         None.
-        Returns:
-         Nothing.
-        '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Path Table Record not yet initialized")
-
-        self.extent_location = self.dirrecord.extent_location()
-
-    def set_depth(self, depth):
-        '''
-        A method to set the depth for this Path Table Record.
-
-        Parameters:
-         depth - The depth for this path table record.
-        Returns:
-         Nothing.
-        '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Path Table Record not yet initialized")
-        self.depth = depth
-
-    def set_directory_number(self, dirnum):
-        '''
-        A method to set the directory number for this Path Table Record.
-
-        Parameters:
-         dirnum - The directory number to set this Path Table Record to.
-        Returns:
-         Nothing.
-        '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Path Table Record not yet initialized")
-        self.directory_num = dirnum
-
-    def update_parent_directory_number(self):
+    def update_parent_directory_number(self, parent_dir_num):
         '''
         A method to update the parent directory number for this Path Table
         Record from the directory record.
 
         Parameters:
-         None.
+         parent_dir_num - The new parent directory number to assign to this PTR.
         Returns:
          Nothing.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Path Table Record not yet initialized")
-        if self.dirrecord.parent is None:
-            self.parent_directory_num = 1
-        else:
-            self.parent_directory_num = self.dirrecord.parent.ptr.directory_num
-
-    def _less_than(self, other, self_parent_dir_num, other_parent_dir_num):
-        '''
-        An internal method to compute whether this object is less than another
-        object, with the parent directory number passed in.  We pass in the
-        parent directory number so that this can work for both little endian
-        and big endian records.
-
-        Parameters:
-         other - The path table record to compare this one against
-         self_parent_dir_num - The parent directory number for this PTR
-         other_parent_dir_num - The parent directory number for the other PTR
-        Returns:
-         True if this PTR is less than the other PTR.
-        '''
-        if self.depth != other.depth:
-            return self.depth < other.depth
-        elif self_parent_dir_num != other_parent_dir_num:
-            return self_parent_dir_num < other_parent_dir_num
-        else:
-            # This needs to return whether self.directory_identifier is less than
-            # other.directory_identifier.  Here we use the ISO9600 Path Table
-            # Record name sorting order which is essentially:
-            #
-            # 1.  The \x00 is always the "dot" record, and is always first.
-            # 2.  The \x01 is always the "dotdot" record, and is always second.
-            # 3.  Other entries are sorted lexically; this does not exactly
-            #     match the sorting method specified in Ecma-119, but does OK
-            #     for now.
-            if self.directory_identifier == b'\x00':
-                # If both self.directory_identifier and other.directory_identifier
-                # are 0, then they are not strictly less.
-                if other.directory_identifier == b'\x00':
-                    return False
-                return True
-            if other.directory_identifier == b'\x00':
-                return False
-
-            if self.directory_identifier == b'\x01':
-                if other.directory_identifier == '\x00':
-                    return False
-                return True
-
-            if other.directory_identifier == b'\x01':
-                # If self.directory_identifier was '\x00', it would have been
-                # caught above.
-                return False
-            return self.directory_identifier < other.directory_identifier
-
-    def __lt__(self, other):
-        return self._less_than(other, self.parent_directory_num, other.parent_directory_num)
-
-    def less_than_be(self, other):
-        '''
-        A method to compare this big-endian PTR with another big-endian PTR.
-
-        Parameters:
-         other - The other big-endian PTR to compare against
-        Returns:
-         True if this PTR is less than the other PTR.
-        '''
-        return self._less_than(other, utils.swab_16bit(self.parent_directory_num), utils.swab_16bit(other.parent_directory_num))
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Path Table Record not yet initialized")
+        self.parent_directory_num = parent_dir_num
 
     def equal_to_be(self, be_record):
         '''
@@ -307,8 +200,8 @@ class PathTableRecord(object):
         Returns:
          Nothing.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("This Path Table Record is not yet initialized")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("This Path Table Record is not yet initialized")
 
         if be_record.len_di != self.len_di or \
            be_record.xattr_length != self.xattr_length or \

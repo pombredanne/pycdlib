@@ -1,4 +1,4 @@
-# Copyright (C) 2015-2016  Chris Lalancette <clalancette@gmail.com>
+# Copyright (C) 2015-2017  Chris Lalancette <clalancette@gmail.com>
 
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -20,13 +20,15 @@ Classes and utilities to support Rock Ridge extensions.
 
 from __future__ import absolute_import
 
+import bisect
 import struct
 
-import pycdlib.pycdlibexception as pycdlibexception
 import pycdlib.dates as dates
+import pycdlib.pycdlibexception as pycdlibexception
 import pycdlib.utils as utils
 
 SU_ENTRY_VERSION = 1
+
 
 class RRSPRecord(object):
     '''
@@ -35,7 +37,7 @@ class RRSPRecord(object):
     prior to parsing a Rock Ridge entry out of a directory record.
     '''
     def __init__(self):
-        self.initialized = False
+        self._initialized = False
 
     def parse(self, rrstr):
         '''
@@ -46,8 +48,8 @@ class RRSPRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("SP record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("SP record already initialized!")
 
         (su_len, su_entry_version_unused, check_byte1, check_byte2,
          self.bytes_to_skip) = struct.unpack_from("=BBBBB", rrstr[:7], 2)
@@ -56,11 +58,11 @@ class RRSPRecord(object):
         # so we don't bother.
 
         if su_len != RRSPRecord.length():
-            raise pycdlibexception.PyCdlibException("Invalid length on rock ridge extension")
+            raise pycdlibexception.PyCdlibInvalidISO("Invalid length on rock ridge extension")
         if check_byte1 != 0xbe or check_byte2 != 0xef:
-            raise pycdlibexception.PyCdlibException("Invalid check bytes on rock ridge extension")
+            raise pycdlibexception.PyCdlibInvalidISO("Invalid check bytes on rock ridge extension")
 
-        self.initialized = True
+        self._initialized = True
 
     def new(self, bytes_to_skip):
         '''
@@ -71,11 +73,11 @@ class RRSPRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("SP record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("SP record already initialized!")
 
         self.bytes_to_skip = bytes_to_skip
-        self.initialized = True
+        self._initialized = True
 
     def record(self):
         '''
@@ -86,8 +88,8 @@ class RRSPRecord(object):
         Returns:
          String containing the Rock Ridge record.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("SP record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("SP record not yet initialized!")
 
         return b'SP' + struct.pack("=BBBBB", RRSPRecord.length(), SU_ENTRY_VERSION, 0xbe, 0xef, self.bytes_to_skip)
 
@@ -104,6 +106,7 @@ class RRSPRecord(object):
         '''
         return 7
 
+
 class RRRRRecord(object):
     '''
     A class that represents a Rock Ridge Rock Ridge record.  This optional
@@ -111,7 +114,7 @@ class RRRRRecord(object):
     '''
     def __init__(self):
         self.rr_flags = None
-        self.initialized = False
+        self._initialized = False
 
     def parse(self, rrstr):
         '''
@@ -122,8 +125,8 @@ class RRRRRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("RR record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("RR record already initialized!")
 
         (su_len, su_entry_version_unused, self.rr_flags) = struct.unpack_from("=BBB",
                                                                               rrstr[:5], 2)
@@ -132,9 +135,9 @@ class RRRRRecord(object):
         # so we don't bother.
 
         if su_len != RRRRRecord.length():
-            raise pycdlibexception.PyCdlibException("Invalid length on rock ridge extension")
+            raise pycdlibexception.PyCdlibInvalidISO("Invalid length on rock ridge extension")
 
-        self.initialized = True
+        self._initialized = True
 
     def new(self):
         '''
@@ -145,11 +148,11 @@ class RRRRRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("RR record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("RR record already initialized!")
 
         self.rr_flags = 0
-        self.initialized = True
+        self._initialized = True
 
     def append_field(self, fieldname):
         '''
@@ -161,8 +164,8 @@ class RRRRRecord(object):
         Returns:
          Nothing.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("RR record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("RR record not yet initialized!")
 
         if fieldname == "PX":
             bit = 0
@@ -181,7 +184,7 @@ class RRRRRecord(object):
         elif fieldname == "TF":
             bit = 7
         else:
-            raise pycdlibexception.PyCdlibException("Unknown RR field name %s" % (fieldname))
+            raise pycdlibexception.PyCdlibInternalError("Unknown RR field name %s" % (fieldname))
 
         self.rr_flags |= (1 << bit)
 
@@ -194,8 +197,8 @@ class RRRRRecord(object):
         Returns:
          String containing the Rock Ridge record.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("RR record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("RR record not yet initialized!")
 
         return b'RR' + struct.pack("=BBB", RRRRRecord.length(), SU_ENTRY_VERSION, self.rr_flags)
 
@@ -212,6 +215,7 @@ class RRRRRecord(object):
         '''
         return 5
 
+
 class RRCERecord(object):
     '''
     A class that represents a Rock Ridge Continuation Entry record.  This
@@ -219,10 +223,9 @@ class RRCERecord(object):
     directory record.
     '''
     def __init__(self):
-        self.continuation_entry = None
-        self.initialized = False
+        self._initialized = False
 
-    def parse(self, rrstr, rr_version):
+    def parse(self, rrstr):
         '''
         Parse a Rock Ridge Continuation Entry record out of a string.
 
@@ -232,8 +235,8 @@ class RRCERecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("CE record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("CE record already initialized!")
 
         (su_len, su_entry_version_unused, bl_cont_area_le, bl_cont_area_be,
          offset_cont_area_le, offset_cont_area_be,
@@ -243,54 +246,83 @@ class RRCERecord(object):
         # so we don't bother.
 
         if su_len != RRCERecord.length():
-            raise pycdlibexception.PyCdlibException("Invalid length on rock ridge extension")
+            raise pycdlibexception.PyCdlibInvalidISO("Invalid length on rock ridge extension")
 
         if bl_cont_area_le != utils.swab_32bit(bl_cont_area_be):
-            raise pycdlibexception.PyCdlibException("CE record big and little endian continuation area do not agree")
+            raise pycdlibexception.PyCdlibInvalidISO("CE record big and little endian continuation area do not agree")
 
         if offset_cont_area_le != utils.swab_32bit(offset_cont_area_be):
-            raise pycdlibexception.PyCdlibException("CE record big and little endian continuation area offset do not agree")
+            raise pycdlibexception.PyCdlibInvalidISO("CE record big and little endian continuation area offset do not agree")
 
         if len_cont_area_le != utils.swab_32bit(len_cont_area_be):
-            raise pycdlibexception.PyCdlibException("CE record big and little endian continuation area length do not agree")
+            raise pycdlibexception.PyCdlibInvalidISO("CE record big and little endian continuation area length do not agree")
 
-        self.continuation_entry = RockRidgeContinuation(rr_version)
-        self.continuation_entry.orig_extent_loc = bl_cont_area_le
-        self.continuation_entry.continue_offset = offset_cont_area_le
-        self.continuation_entry.increment_length(len_cont_area_le)
+        self.bl_cont_area = bl_cont_area_le
+        self.offset_cont_area = offset_cont_area_le
+        self.len_cont_area = len_cont_area_le
 
-        self.initialized = True
+        self._initialized = True
 
-    def new(self, rr_version):
+    def new(self):
         '''
         Create a new Rock Ridge Continuation Entry record.
 
         Parameters:
-         rr_version - The Rock Ridge version to use.
+         None.
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("CE record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("CE record already initialized!")
 
-        self.continuation_entry = RockRidgeContinuation(rr_version)
+        self.bl_cont_area = 0  # This will get set during reshuffle_extents
+        self.offset_cont_area = 0  # This will get set during reshuffle_extents
+        self.len_cont_area = 0  # This will be calculated based on fields put in
 
-        self.initialized = True
+        self._initialized = True
 
-    def add_record(self, record_name, obj, length):
+    def update_extent(self, extent):
         '''
-        Set the record named 'record_name' to the input object, and increment
-        the length accordingly.
+        Update the extent for this CE record.
 
         Parameters:
-         record_name - The name of the record to set.
-         obj - The object to set the record to.
-         length - The amount of space to add to the continuation entry.
+         extent - The new extent for this CE record.
         Returns:
          Nothing.
         '''
-        setattr(self.continuation_entry, record_name, obj)
-        self.continuation_entry.increment_length(length)
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("CE record not yet initialized!")
+
+        self.bl_cont_area = extent
+
+    def update_offset(self, offset):
+        '''
+        Update the offset for this CE record.
+
+        Parameters:
+         extent - The new offset for this CE record.
+        Returns:
+         Nothing.
+        '''
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("CE record not yet initialized!")
+
+        self.offset_cont_area = offset
+
+    def add_record(self, length):
+        '''
+        Add some more length to this CE record.  Used when a new record is going
+        to get recorded into the CE (rather than the DR).
+
+        Parameters:
+         length - The length to add to this CE record.
+        Returns:
+         Nothing.
+        '''
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("CE record not yet initialized!")
+
+        self.len_cont_area += length
 
     def record(self):
         '''
@@ -301,17 +333,18 @@ class RRCERecord(object):
         Returns:
          String containing the Rock Ridge record.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("CE record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("CE record not yet initialized!")
 
-        loc = self.continuation_entry.extent_location()
-        offset = self.continuation_entry.offset()
-        cont_len = self.continuation_entry.length()
-
-        return b'CE' + struct.pack("=BBLLLLLL", RRCERecord.length(),
-                                   SU_ENTRY_VERSION, loc, utils.swab_32bit(loc),
-                                   offset, utils.swab_32bit(offset),
-                                   cont_len, utils.swab_32bit(cont_len))
+        return b'CE' + struct.pack("=BBLLLLLL",
+                                   RRCERecord.length(),
+                                   SU_ENTRY_VERSION,
+                                   self.bl_cont_area,
+                                   utils.swab_32bit(self.bl_cont_area),
+                                   self.offset_cont_area,
+                                   utils.swab_32bit(self.offset_cont_area),
+                                   self.len_cont_area,
+                                   utils.swab_32bit(self.len_cont_area))
 
     @staticmethod
     def length():
@@ -326,6 +359,7 @@ class RRCERecord(object):
         '''
         return 28
 
+
 class RRPXRecord(object):
     '''
     A class that represents a Rock Ridge POSIX File Attributes record.  This
@@ -339,7 +373,7 @@ class RRPXRecord(object):
         self.posix_group_id = None
         self.posix_serial_number = None
 
-        self.initialized = False
+        self._initialized = False
 
     def parse(self, rrstr):
         '''
@@ -350,8 +384,8 @@ class RRPXRecord(object):
         Returns:
          A string representing the RR version, either 1.09 or 1.12.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("PX record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("PX record already initialized!")
 
         (su_len, su_entry_version_unused, posix_file_mode_le, posix_file_mode_be,
          posix_file_links_le, posix_file_links_be, posix_file_user_id_le,
@@ -362,16 +396,16 @@ class RRPXRecord(object):
         # so we don't bother.
 
         if posix_file_mode_le != utils.swab_32bit(posix_file_mode_be):
-            raise pycdlibexception.PyCdlibException("PX record big and little-endian file mode do not agree")
+            raise pycdlibexception.PyCdlibInvalidISO("PX record big and little-endian file mode do not agree")
 
         if posix_file_links_le != utils.swab_32bit(posix_file_links_be):
-            raise pycdlibexception.PyCdlibException("PX record big and little-endian file links do not agree")
+            raise pycdlibexception.PyCdlibInvalidISO("PX record big and little-endian file links do not agree")
 
         if posix_file_user_id_le != utils.swab_32bit(posix_file_user_id_be):
-            raise pycdlibexception.PyCdlibException("PX record big and little-endian file user ID do not agree")
+            raise pycdlibexception.PyCdlibInvalidISO("PX record big and little-endian file user ID do not agree")
 
         if posix_file_group_id_le != utils.swab_32bit(posix_file_group_id_be):
-            raise pycdlibexception.PyCdlibException("PX record big and little-endian file group ID do not agree")
+            raise pycdlibexception.PyCdlibInvalidISO("PX record big and little-endian file group ID do not agree")
 
         # In Rock Ridge 1.09, the su_len here should be 36, while for
         # 1.12, the su_len here should be 44.
@@ -383,11 +417,11 @@ class RRPXRecord(object):
              posix_file_serial_number_be) = struct.unpack_from("=LL",
                                                                rrstr[:44], 36)
             if posix_file_serial_number_le != utils.swab_32bit(posix_file_serial_number_be):
-                raise pycdlibexception.PyCdlibException("PX record big and little-endian file serial number do not agree")
+                raise pycdlibexception.PyCdlibInvalidISO("PX record big and little-endian file serial number do not agree")
 
             rr_version = "1.12"
         else:
-            raise pycdlibexception.PyCdlibException("Invalid length on rock ridge extension")
+            raise pycdlibexception.PyCdlibInvalidISO("Invalid length on rock ridge extension")
 
         self.posix_file_mode = posix_file_mode_le
         self.posix_file_links = posix_file_links_le
@@ -395,7 +429,7 @@ class RRPXRecord(object):
         self.posix_group_id = posix_file_group_id_le
         self.posix_serial_number = posix_file_serial_number_le
 
-        self.initialized = True
+        self._initialized = True
 
         return rr_version
 
@@ -409,8 +443,8 @@ class RRPXRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("PX record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("PX record already initialized!")
 
         if isdir:
             self.posix_file_mode = 0o040555
@@ -424,7 +458,7 @@ class RRPXRecord(object):
         self.posix_group_id = 0
         self.posix_serial_number = 0
 
-        self.initialized = True
+        self._initialized = True
 
     def record(self, rr_version):
         '''
@@ -436,8 +470,8 @@ class RRPXRecord(object):
         Returns:
          String containing the Rock Ridge record.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("PX record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("PX record not yet initialized!")
 
         outlist = [b'PX', struct.pack("=BBLLLLLLLL", RRPXRecord.length(rr_version),
                                       SU_ENTRY_VERSION, self.posix_file_mode,
@@ -452,7 +486,8 @@ class RRPXRecord(object):
             outlist.append(struct.pack("=LL", self.posix_serial_number,
                                        utils.swab_32bit(self.posix_serial_number)))
         elif rr_version != "1.09":
-            raise pycdlibexception.PyCdlibException("Invalid rr_version")
+            # This should never happen
+            raise pycdlibexception.PyCdlibInternalError("Invalid rr_version")
 
         return b"".join(outlist)
 
@@ -472,7 +507,9 @@ class RRPXRecord(object):
         elif rr_version == "1.12":
             return 44
         else:
-            raise pycdlibexception.PyCdlibException("Invalid rr_version")
+            # This should never happen
+            raise pycdlibexception.PyCdlibInternalError("Invalid rr_version")
+
 
 class RRERRecord(object):
     '''
@@ -482,7 +519,7 @@ class RRERRecord(object):
         self.ext_id = None
         self.ext_des = None
         self.ext_src = None
-        self.initialized = False
+        self._initialized = False
 
     def parse(self, rrstr):
         '''
@@ -493,8 +530,8 @@ class RRERRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("ER record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("ER record already initialized!")
 
         (su_len, su_entry_version_unused, len_id, len_des, len_src,
          self.ext_ver) = struct.unpack_from("=BBBBBB", rrstr[:8], 2)
@@ -504,18 +541,18 @@ class RRERRecord(object):
 
         # Ensure that the length isn't crazy
         if su_len > len(rrstr):
-            raise pycdlibexception.PyCdlibException("Length of ER record much too long")
+            raise pycdlibexception.PyCdlibInvalidISO("Length of ER record much too long")
 
         # Also ensure that the combination of len_id, len_des, and len_src doesn't overrun
         # either su_len or rrstr.
         total_length = len_id + len_des + len_src
         if total_length > su_len or total_length > len(rrstr):
-            raise pycdlibexception.PyCdlibException("Combined length of ER ID, des, and src longer than record")
+            raise pycdlibexception.PyCdlibInvalidISO("Combined length of ER ID, des, and src longer than record")
 
         fmtstr = "=%ds%ds%ds" % (len_id, len_des, len_src)
         (self.ext_id, self.ext_des, self.ext_src) = struct.unpack_from(fmtstr, rrstr, 8)
 
-        self.initialized = True
+        self._initialized = True
 
     def new(self, ext_id, ext_des, ext_src):
         '''
@@ -528,15 +565,15 @@ class RRERRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("ER record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("ER record already initialized!")
 
         self.ext_id = ext_id
         self.ext_des = ext_des
         self.ext_src = ext_src
         self.ext_ver = 1
 
-        self.initialized = True
+        self._initialized = True
 
     def record(self):
         '''
@@ -548,8 +585,8 @@ class RRERRecord(object):
         Returns:
          String containing the Rock Ridge record.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("ER record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("ER record not yet initialized!")
 
         return b'ER' + struct.pack("=BBBBBB", RRERRecord.length(self.ext_id, self.ext_des, self.ext_src), SU_ENTRY_VERSION, len(self.ext_id), len(self.ext_des), len(self.ext_src), self.ext_ver) + self.ext_id + self.ext_des + self.ext_src
 
@@ -566,7 +603,8 @@ class RRERRecord(object):
         Returns:
          The length of this record in bytes.
         '''
-        return 8+len(ext_id)+len(ext_des)+len(ext_src)
+        return 8 + len(ext_id) + len(ext_des) + len(ext_src)
+
 
 class RRESRecord(object):
     '''
@@ -574,7 +612,7 @@ class RRESRecord(object):
     '''
     def __init__(self):
         self.extension_sequence = None
-        self.initialized = False
+        self._initialized = False
 
     def parse(self, rrstr):
         '''
@@ -585,17 +623,17 @@ class RRESRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("ES record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("ES record already initialized!")
 
         # We assume that the caller has already checked the su_entry_version,
         # so we don't bother.
 
         (su_len, su_entry_version_unused, self.extension_sequence) = struct.unpack_from("=BBB", rrstr[:5], 2)
         if su_len != RRESRecord.length():
-            raise pycdlibexception.PyCdlibException("Invalid length on rock ridge extension")
+            raise pycdlibexception.PyCdlibInvalidISO("Invalid length on rock ridge extension")
 
-        self.initialized = True
+        self._initialized = True
 
     def new(self, extension_sequence):
         '''
@@ -606,11 +644,11 @@ class RRESRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("ES record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("ES record already initialized!")
 
         self.extension_sequence = extension_sequence
-        self.initialized = True
+        self._initialized = True
 
     def record(self):
         '''
@@ -621,8 +659,8 @@ class RRESRecord(object):
         Returns:
          String containing the Rock Ridge record.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("ES record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("ES record not yet initialized!")
 
         return b'ES' + struct.pack("=BBB", RRESRecord.length(), SU_ENTRY_VERSION, self.extension_sequence)
 
@@ -639,6 +677,7 @@ class RRESRecord(object):
         '''
         return 5
 
+
 class RRPNRecord(object):
     '''
     A class that represents a Rock Ridge POSIX Device Number record.  This
@@ -647,7 +686,7 @@ class RRPNRecord(object):
     def __init__(self):
         self.dev_t_high = None
         self.dev_t_low = None
-        self.initialized = False
+        self._initialized = False
 
     def parse(self, rrstr):
         '''
@@ -658,8 +697,8 @@ class RRPNRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("PN record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("PN record already initialized!")
 
         (su_len, su_entry_version_unused, dev_t_high_le, dev_t_high_be,
          dev_t_low_le, dev_t_low_be) = struct.unpack_from("=BBLLLL", rrstr[:20], 2)
@@ -668,18 +707,18 @@ class RRPNRecord(object):
         # so we don't bother.
 
         if su_len != RRPNRecord.length():
-            raise pycdlibexception.PyCdlibException("Invalid length on rock ridge extension")
+            raise pycdlibexception.PyCdlibInvalidISO("Invalid length on rock ridge extension")
 
         if dev_t_high_le != utils.swab_32bit(dev_t_high_be):
-            raise pycdlibexception.PyCdlibException("Dev_t high little-endian does not match big-endian")
+            raise pycdlibexception.PyCdlibInvalidISO("Dev_t high little-endian does not match big-endian")
 
         if dev_t_low_le != utils.swab_32bit(dev_t_low_be):
-            raise pycdlibexception.PyCdlibException("Dev_t low little-endian does not match big-endian")
+            raise pycdlibexception.PyCdlibInvalidISO("Dev_t low little-endian does not match big-endian")
 
         self.dev_t_high = dev_t_high_le
         self.dev_t_low = dev_t_low_le
 
-        self.initialized = True
+        self._initialized = True
 
     def new(self, dev_t_high, dev_t_low):
         '''
@@ -691,13 +730,13 @@ class RRPNRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("PN record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("PN record already initialized!")
 
         self.dev_t_high = dev_t_high
         self.dev_t_low = dev_t_low
 
-        self.initialized = True
+        self._initialized = True
 
     def record(self):
         '''
@@ -709,8 +748,8 @@ class RRPNRecord(object):
         Returns:
          String containing the Rock Ridge record.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("PN record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("PN record not yet initialized!")
 
         return b'PN' + struct.pack("=BBLLLL", RRPNRecord.length(), SU_ENTRY_VERSION, self.dev_t_high, utils.swab_32bit(self.dev_t_high), self.dev_t_low, utils.swab_32bit(self.dev_t_low))
 
@@ -727,6 +766,7 @@ class RRPNRecord(object):
         '''
         return 20
 
+
 class RRSLRecord(object):
     '''
     A class that represents a Rock Ridge Symbolic Link record.  This record
@@ -740,17 +780,17 @@ class RRSLRecord(object):
         A class that represents one component of a Symbolic Link Record.
         '''
         def __init__(self, flags, length, data, last_continued):
-            if not flags in [0, 1, 2, 4, 8]:
-                raise pycdlibexception.PyCdlibException("Invalid Rock Ridge symlink flags 0x%x" % (flags))
+            if flags not in [0, 1, 2, 4, 8]:
+                raise pycdlibexception.PyCdlibInternalError("Invalid Rock Ridge symlink flags 0x%x" % (flags))
 
             if (flags & (1 << 1) or flags & (1 << 2) or flags & (1 << 3)) and length != 0:
-                raise pycdlibexception.PyCdlibException("Rock Ridge symlinks to dot, dotdot, or root should have zero length")
+                raise pycdlibexception.PyCdlibInternalError("Rock Ridge symlinks to dot, dotdot, or root should have zero length")
 
             if (flags & (1 << 1) or flags & (1 << 2) or flags & (1 << 3)) and flags & (1 << 0):
-                raise pycdlibexception.PyCdlibException("Cannot have RockRidge symlink that is both a continuation and dot, dotdot, or root")
+                raise pycdlibexception.PyCdlibInternalError("Cannot have RockRidge symlink that is both a continuation and dot, dotdot, or root")
 
             if (flags & (1 << 1) or flags & (1 << 2) or flags & (1 << 3)) and last_continued:
-                raise pycdlibexception.PyCdlibException("It doesn't make sense to have the last component be continued, and this one be dot, dotdot, or root")
+                raise pycdlibexception.PyCdlibInternalError("It doesn't make sense to have the last component be continued, and this one be dot, dotdot, or root")
 
             self.flags = flags
             self.curr_length = length
@@ -801,8 +841,8 @@ class RRSLRecord(object):
                 return struct.pack("=BB", (1 << 2), 0)
             elif self.flags & (1 << 3):
                 return struct.pack("=BB", (1 << 3), 0)
-            else:
-                return struct.pack("=BB", self.flags, self.curr_length) + self.data
+
+            return struct.pack("=BB", self.flags, self.curr_length) + self.data
 
         def set_continued(self):
             '''
@@ -814,6 +854,12 @@ class RRSLRecord(object):
              Nothing.
             '''
             self.flags |= (1 << 0)
+
+        def __eq__(self, other):
+            return self.flags == other.flags and self.curr_length == other.curr_length and self.data == other.data
+
+        def __ne__(self, other):
+            return not self.__eq__(other)
 
         @staticmethod
         def length(symlink_component):
@@ -871,7 +917,7 @@ class RRSLRecord(object):
     def __init__(self):
         self.symlink_components = []
         self.flags = 0
-        self.initialized = False
+        self._initialized = False
 
     def parse(self, rrstr, previous_continued):
         '''
@@ -882,8 +928,8 @@ class RRSLRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("SL record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("SL record already initialized!")
 
         (su_len, su_entry_version_unused, self.flags) = struct.unpack_from("=BBB", rrstr[:5], 2)
 
@@ -893,12 +939,12 @@ class RRSLRecord(object):
         cr_offset = 5
         data_len = su_len - 5
         while data_len > 0:
-            (cr_flags, len_cp) = struct.unpack_from("=BB", rrstr[:cr_offset+2], cr_offset)
+            (cr_flags, len_cp) = struct.unpack_from("=BB", rrstr[:cr_offset + 2], cr_offset)
 
             data_len -= 2
             cr_offset += 2
 
-            self.symlink_components.append(self.Component(cr_flags, len_cp, rrstr[cr_offset:cr_offset+len_cp], previous_continued))
+            self.symlink_components.append(self.Component(cr_flags, len_cp, rrstr[cr_offset:cr_offset + len_cp], previous_continued))
 
             previous_continued = self.symlink_components[-1].is_continued()
 
@@ -909,7 +955,7 @@ class RRSLRecord(object):
             cr_offset += len_cp
             data_len -= len_cp
 
-        self.initialized = True
+        self._initialized = True
 
     def new(self):
         '''
@@ -920,10 +966,10 @@ class RRSLRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("SL record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("SL record already initialized!")
 
-        self.initialized = True
+        self._initialized = True
 
     def add_component(self, symlink_comp):
         '''
@@ -934,11 +980,11 @@ class RRSLRecord(object):
         Returns:
          Nothing.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("SL record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("SL record not yet initialized!")
 
         if (self.current_length() + RRSLRecord.Component.length(symlink_comp)) > 255:
-            raise pycdlibexception.PyCdlibException("Symlink would be longer than 255")
+            raise pycdlibexception.PyCdlibInvalidInput("Symlink would be longer than 255")
 
         self.symlink_components.append(self.Component.factory(symlink_comp))
 
@@ -951,8 +997,8 @@ class RRSLRecord(object):
         Returns:
          Length of this symlink record.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("SL record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("SL record not yet initialized!")
 
         strlist = []
         for comp in self.symlink_components:
@@ -969,8 +1015,8 @@ class RRSLRecord(object):
         Returns:
          String containing the Rock Ridge record.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("SL record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("SL record not yet initialized!")
 
         outlist = [b'SL', struct.pack("=BBB", self.current_length(), SU_ENTRY_VERSION, self.flags)]
         for comp in self.symlink_components:
@@ -987,8 +1033,8 @@ class RRSLRecord(object):
         Returns:
          String containing all components of the symlink.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("SL record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("SL record not yet initialized!")
 
         outlist = []
         continued = False
@@ -997,6 +1043,7 @@ class RRSLRecord(object):
             if name == b'/':
                 outlist = []
                 continued = False
+                name = b''
 
             if not continued:
                 outlist.append(name)
@@ -1016,8 +1063,8 @@ class RRSLRecord(object):
         Returns:
          Nothing.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("SL record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("SL record not yet initialized!")
 
         self.flags |= (1 << 0)
 
@@ -1030,11 +1077,11 @@ class RRSLRecord(object):
         Returns:
          Nothing.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("SL record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("SL record not yet initialized!")
 
-        if len(self.symlink_components) == 0:
-            raise pycdlibexception.PyCdlibException("Trying to set continued on a non-existent component!")
+        if not self.symlink_components:
+            raise pycdlibexception.PyCdlibInternalError("Trying to set continued on a non-existent component!")
 
         self.symlink_components[-1].set_continued()
 
@@ -1048,11 +1095,11 @@ class RRSLRecord(object):
         Returns:
          True if the previous component of this SL record is continued, False otherwise.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("SL record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("SL record not yet initialized!")
 
-        if len(self.symlink_components) == 0:
-            raise pycdlibexception.PyCdlibException("Trying to get continued on a non-existent component!")
+        if not self.symlink_components:
+            raise pycdlibexception.PyCdlibInternalError("Trying to get continued on a non-existent component!")
 
         return self.symlink_components[-1].is_continued()
 
@@ -1094,12 +1141,13 @@ class RRSLRecord(object):
             length += RRSLRecord.Component.length(comp)
         return length
 
+
 class RRNMRecord(object):
     '''
     A class that represents a Rock Ridge Alternate Name record.
     '''
     def __init__(self):
-        self.initialized = False
+        self._initialized = False
         self.posix_name_flags = None
         self.posix_name = b''
 
@@ -1112,8 +1160,8 @@ class RRNMRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("NM record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("NM record already initialized!")
 
         (su_len, su_entry_version_unused, self.posix_name_flags) = struct.unpack_from("=BBB", rrstr[:5], 2)
 
@@ -1122,14 +1170,14 @@ class RRNMRecord(object):
 
         name_len = su_len - 5
         if (self.posix_name_flags & 0x7) not in [0, 1, 2, 4]:
-            raise pycdlibexception.PyCdlibException("Invalid Rock Ridge NM flags")
+            raise pycdlibexception.PyCdlibInvalidISO("Invalid Rock Ridge NM flags")
 
         if name_len != 0:
             if (self.posix_name_flags & (1 << 1)) or (self.posix_name_flags & (1 << 2)) or (self.posix_name_flags & (1 << 5)):
-                raise pycdlibexception.PyCdlibException("Invalid name in Rock Ridge NM entry (0x%x %d)" % (self.posix_name_flags, name_len))
-            self.posix_name += rrstr[5:5+name_len]
+                raise pycdlibexception.PyCdlibInvalidISO("Invalid name in Rock Ridge NM entry (0x%x %d)" % (self.posix_name_flags, name_len))
+            self.posix_name += rrstr[5:5 + name_len]
 
-        self.initialized = True
+        self._initialized = True
 
     def new(self, rr_name):
         '''
@@ -1140,13 +1188,13 @@ class RRNMRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("NM record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("NM record already initialized!")
 
         self.posix_name = rr_name
         self.posix_name_flags = 0
 
-        self.initialized = True
+        self._initialized = True
 
     def record(self):
         '''
@@ -1157,8 +1205,8 @@ class RRNMRecord(object):
         Returns:
          String containing the Rock Ridge record.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("NM record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("NM record not yet initialized!")
 
         return b'NM' + struct.pack(b"=BBB", RRNMRecord.length(self.posix_name), SU_ENTRY_VERSION, self.posix_name_flags) + self.posix_name
 
@@ -1171,8 +1219,8 @@ class RRNMRecord(object):
         Returns:
          Nothing.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("NM record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("NM record not yet initialized!")
 
         self.posix_name_flags |= (1 << 0)
 
@@ -1189,6 +1237,7 @@ class RRNMRecord(object):
         '''
         return 5 + len(rr_name)
 
+
 class RRCLRecord(object):
     '''
     A class that represents a Rock Ridge Child Link record.  This record
@@ -1197,7 +1246,7 @@ class RRCLRecord(object):
     '''
     def __init__(self):
         self.child_log_block_num = None
-        self.initialized = False
+        self._initialized = False
 
     def parse(self, rrstr):
         '''
@@ -1208,21 +1257,21 @@ class RRCLRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("CL record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("CL record already initialized!")
 
         # We assume that the caller has already checked the su_entry_version,
         # so we don't bother.
 
         (su_len, su_entry_version_unused, child_log_block_num_le, child_log_block_num_be) = struct.unpack_from("=BBLL", rrstr[:12], 2)
         if su_len != RRCLRecord.length():
-            raise pycdlibexception.PyCdlibException("Invalid length on rock ridge extension")
+            raise pycdlibexception.PyCdlibInvalidISO("Invalid length on rock ridge extension")
 
         if child_log_block_num_le != utils.swab_32bit(child_log_block_num_be):
-            raise pycdlibexception.PyCdlibException("Little endian block num does not equal big endian; corrupt ISO")
+            raise pycdlibexception.PyCdlibInvalidISO("Little endian block num does not equal big endian; corrupt ISO")
         self.child_log_block_num = child_log_block_num_le
 
-        self.initialized = True
+        self._initialized = True
 
     def new(self):
         '''
@@ -1233,12 +1282,12 @@ class RRCLRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("CL record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("CL record already initialized!")
 
-        self.child_log_block_num = 0 # This gets set later
+        self.child_log_block_num = 0  # This gets set later
 
-        self.initialized = True
+        self._initialized = True
 
     def record(self):
         '''
@@ -1249,8 +1298,8 @@ class RRCLRecord(object):
         Returns:
          String containing the Rock Ridge record.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("CL record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("CL record not yet initialized!")
 
         return b'CL' + struct.pack("=BBLL", RRCLRecord.length(), SU_ENTRY_VERSION, self.child_log_block_num, utils.swab_32bit(self.child_log_block_num))
 
@@ -1263,8 +1312,8 @@ class RRCLRecord(object):
         Returns:
          Nothing.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("CL record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("CL record not yet initialized!")
 
         self.child_log_block_num = bl
 
@@ -1281,6 +1330,7 @@ class RRCLRecord(object):
         '''
         return 12
 
+
 class RRPLRecord(object):
     '''
     A class that represents a Rock Ridge Parent Link record.  This record
@@ -1289,7 +1339,7 @@ class RRPLRecord(object):
     '''
     def __init__(self):
         self.parent_log_block_num = None
-        self.initialized = False
+        self._initialized = False
 
     def parse(self, rrstr):
         '''
@@ -1300,20 +1350,20 @@ class RRPLRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("PL record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("PL record already initialized!")
 
         # We assume that the caller has already checked the su_entry_version,
         # so we don't bother.
 
         (su_len, su_entry_version_unused, parent_log_block_num_le, parent_log_block_num_be) = struct.unpack_from("=BBLL", rrstr[:12], 2)
         if su_len != RRPLRecord.length():
-            raise pycdlibexception.PyCdlibException("Invalid length on rock ridge extension")
+            raise pycdlibexception.PyCdlibInvalidISO("Invalid length on rock ridge extension")
         if parent_log_block_num_le != utils.swab_32bit(parent_log_block_num_be):
-            raise pycdlibexception.PyCdlibException("Little endian block num does not equal big endian; corrupt ISO")
+            raise pycdlibexception.PyCdlibInvalidISO("Little endian block num does not equal big endian; corrupt ISO")
         self.parent_log_block_num = parent_log_block_num_le
 
-        self.initialized = True
+        self._initialized = True
 
     def new(self):
         '''
@@ -1324,12 +1374,12 @@ class RRPLRecord(object):
         Returns:
          String containing the Rock Ridge record.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("PL record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("PL record already initialized!")
 
-        self.parent_log_block_num = 0 # This will get set later
+        self.parent_log_block_num = 0  # This will get set later
 
-        self.initialized = True
+        self._initialized = True
 
     def record(self):
         '''
@@ -1340,8 +1390,8 @@ class RRPLRecord(object):
         Returns:
          String containing the Rock Ridge record.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("PL record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("PL record not yet initialized!")
 
         return b'PL' + struct.pack("=BBLL", RRPLRecord.length(), SU_ENTRY_VERSION, self.parent_log_block_num, utils.swab_32bit(self.parent_log_block_num))
 
@@ -1354,8 +1404,8 @@ class RRPLRecord(object):
         Returns:
          Nothing.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("PL record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("PL record not yet initialized!")
 
         self.parent_log_block_num = bl
 
@@ -1371,6 +1421,7 @@ class RRPLRecord(object):
          The length of this record in bytes.
         '''
         return 12
+
 
 class RRTFRecord(object):
     '''
@@ -1391,7 +1442,7 @@ class RRTFRecord(object):
         self.expiration_time = None
         self.effective_time = None
         self.time_flags = None
-        self.initialized = False
+        self._initialized = False
 
     def parse(self, rrstr):
         '''
@@ -1402,15 +1453,15 @@ class RRTFRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("TF record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("TF record already initialized!")
 
         # We assume that the caller has already checked the su_entry_version,
         # so we don't bother.
 
         (su_len, su_entry_version_unused, self.time_flags,) = struct.unpack_from("=BBB", rrstr[:5], 2)
         if su_len < 5:
-            raise pycdlibexception.PyCdlibException("Not enough bytes in the TF record")
+            raise pycdlibexception.PyCdlibInvalidISO("Not enough bytes in the TF record")
 
         tflen = 7
         datetype = dates.DirectoryRecordDate
@@ -1420,34 +1471,34 @@ class RRTFRecord(object):
         tmp = 5
         if self.time_flags & (1 << 0):
             self.creation_time = datetype()
-            self.creation_time.parse(rrstr[tmp:tmp+tflen])
+            self.creation_time.parse(rrstr[tmp:tmp + tflen])
             tmp += tflen
         if self.time_flags & (1 << 1):
             self.access_time = datetype()
-            self.access_time.parse(rrstr[tmp:tmp+tflen])
+            self.access_time.parse(rrstr[tmp:tmp + tflen])
             tmp += tflen
         if self.time_flags & (1 << 2):
             self.modification_time = datetype()
-            self.modification_time.parse(rrstr[tmp:tmp+tflen])
+            self.modification_time.parse(rrstr[tmp:tmp + tflen])
             tmp += tflen
         if self.time_flags & (1 << 3):
             self.attribute_change_time = datetype()
-            self.attribute_change_time.parse(rrstr[tmp:tmp+tflen])
+            self.attribute_change_time.parse(rrstr[tmp:tmp + tflen])
             tmp += tflen
         if self.time_flags & (1 << 4):
             self.backup_time = datetype()
-            self.backup_time.parse(rrstr[tmp:tmp+tflen])
+            self.backup_time.parse(rrstr[tmp:tmp + tflen])
             tmp += tflen
         if self.time_flags & (1 << 5):
             self.expiration_time = datetype()
-            self.expiration_time.parse(rrstr[tmp:tmp+tflen])
+            self.expiration_time.parse(rrstr[tmp:tmp + tflen])
             tmp += tflen
         if self.time_flags & (1 << 6):
             self.effective_time = datetype()
-            self.effective_time.parse(rrstr[tmp:tmp+tflen])
+            self.effective_time.parse(rrstr[tmp:tmp + tflen])
             tmp += tflen
 
-        self.initialized = True
+        self._initialized = True
 
     def new(self, time_flags):
         '''
@@ -1458,8 +1509,8 @@ class RRTFRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("TF record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("TF record already initialized!")
 
         self.time_flags = time_flags
 
@@ -1489,7 +1540,7 @@ class RRTFRecord(object):
             self.effective_time = datetype()
             self.effective_time.new()
 
-        self.initialized = True
+        self._initialized = True
 
     def record(self):
         '''
@@ -1500,8 +1551,8 @@ class RRTFRecord(object):
         Returns:
          String containing the Rock Ridge record.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("TF record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("TF record not yet initialized!")
 
         outlist = [b'TF', struct.pack("=BBB", RRTFRecord.length(self.time_flags), SU_ENTRY_VERSION, self.time_flags)]
         if self.creation_time is not None:
@@ -1540,7 +1591,8 @@ class RRTFRecord(object):
             if time_flags & (1 << i):
                 tf_num += 1
 
-        return 5 + tf_each_size*tf_num
+        return 5 + tf_each_size * tf_num
+
 
 class RRSFRecord(object):
     '''
@@ -1548,7 +1600,7 @@ class RRSFRecord(object):
     represents the full file size of a sparsely-populated file.
     '''
     def __init__(self):
-        self.initialized = False
+        self._initialized = False
 
     def parse(self, rrstr):
         '''
@@ -1559,8 +1611,8 @@ class RRSFRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("SF record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("SF record already initialized!")
 
         # We assume that the caller has already checked the su_entry_version,
         # so we don't bother.
@@ -1569,18 +1621,18 @@ class RRSFRecord(object):
          virtual_file_size_high_be, virtual_file_size_low_le,
          virtual_file_size_low_be, self.table_depth) = struct.unpack_from("=BBLLLLB", rrstr[:21], 2)
         if su_len != RRSFRecord.length():
-            raise pycdlibexception.PyCdlibException("Invalid length on rock ridge extension")
+            raise pycdlibexception.PyCdlibInvalidISO("Invalid length on rock ridge extension")
 
         if virtual_file_size_high_le != utils.swab_32bit(virtual_file_size_high_be):
-            raise pycdlibexception.PyCdlibException("Virtual file size high little-endian does not match big-endian")
+            raise pycdlibexception.PyCdlibInvalidISO("Virtual file size high little-endian does not match big-endian")
 
         if virtual_file_size_low_le != utils.swab_32bit(virtual_file_size_low_be):
-            raise pycdlibexception.PyCdlibException("Virtual file size low little-endian does not match big-endian")
+            raise pycdlibexception.PyCdlibInvalidISO("Virtual file size low little-endian does not match big-endian")
 
         self.virtual_file_size_high = virtual_file_size_high_le
         self.virtual_file_size_low = virtual_file_size_low_le
 
-        self.initialized = True
+        self._initialized = True
 
     def new(self, file_size_high, file_size_low, table_depth):
         '''
@@ -1593,14 +1645,14 @@ class RRSFRecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("SF record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("SF record already initialized!")
 
         self.virtual_file_size_high = file_size_high
         self.virtual_file_size_low = file_size_low
         self.table_depth = table_depth
 
-        self.initialized = True
+        self._initialized = True
 
     def record(self):
         '''
@@ -1611,8 +1663,8 @@ class RRSFRecord(object):
         Returns:
          String containing the Rock Ridge record.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("SF record not yet initialized!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("SF record not yet initialized!")
 
         return b'SF' + struct.pack("=BBLLLLB", RRSFRecord.length(), SU_ENTRY_VERSION, self.virtual_file_size_high, utils.swab_32bit(self.virtual_file_size_high), self.virtual_file_size_low, utils.swab_32bit(self.virtual_file_size_low), self.table_depth)
 
@@ -1629,6 +1681,7 @@ class RRSFRecord(object):
         '''
         return 21
 
+
 class RRRERecord(object):
     '''
     A class that represents a Rock Ridge Relocated Directory record.  This
@@ -1636,7 +1689,7 @@ class RRRERecord(object):
     deeply nested.
     '''
     def __init__(self):
-        self.initialized = False
+        self._initialized = False
 
     def parse(self, rrstr):
         '''
@@ -1647,8 +1700,8 @@ class RRRERecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("RE record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("RE record already initialized!")
 
         (su_len, su_entry_version_unused) = struct.unpack_from("=BB", rrstr[:4], 2)
 
@@ -1656,9 +1709,9 @@ class RRRERecord(object):
         # so we don't bother.
 
         if su_len != 4:
-            raise pycdlibexception.PyCdlibException("Invalid length on rock ridge extension")
+            raise pycdlibexception.PyCdlibInvalidISO("Invalid length on rock ridge extension")
 
-        self.initialized = True
+        self._initialized = True
 
     def new(self):
         '''
@@ -1669,10 +1722,10 @@ class RRRERecord(object):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("RE record already initialized!")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("RE record already initialized!")
 
-        self.initialized = True
+        self._initialized = True
 
     def record(self):
         '''
@@ -1684,8 +1737,8 @@ class RRRERecord(object):
         Returns:
          String containing the Rock Ridge record.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("RE record not yet initialized")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("RE record not yet initialized")
 
         return b'RE' + struct.pack("=BB", RRRERecord.length(), SU_ENTRY_VERSION)
 
@@ -1702,23 +1755,11 @@ class RRRERecord(object):
         '''
         return 4
 
-# This is the class that implements the Rock Ridge extensions for PyCdlib.  The
-# Rock Ridge extensions are a set of extensions for embedding POSIX semantics
-# on an ISO9660 filesystem.  Rock Ridge works by utilizing the "System Use"
-# area of the directory record to store additional metadata about files.  This
-# includes things like POSIX users, groups, ctime, mtime, atime, etc., as well
-# as the ability to have directory structures deeper than 8 and filenames longer
-# than 8.3.  Rock Ridge depends on the System Use and Sharing Protocol (SUSP),
-# which defines some standards on how to use the System Area.
-#
-# A note about versions.  PyCdlib implements version 1.12 of SUSP.  It implements
-# both version 1.09 and 1.12 of Rock Ridge itself.  This is slightly strange,
-# but genisoimage (which is what pycdlib compares itself against) implements 1.09,
-# so we keep support for both.
-class RockRidgeBase(object):
+
+class RockRidgeEntries(object):
     '''
-    A base class representing Rock Ridge entries; both RockRidge and
-    RockRidgeContinuation inherit from this class.
+    A simple class container to hold a long list of possible Rock Ridge
+    records.
     '''
     def __init__(self):
         self.sp_record = None
@@ -1735,26 +1776,73 @@ class RockRidgeBase(object):
         self.tf_record = None
         self.sf_record = None
         self.re_record = None
-        self.child_link = None
+
+
+# This is the class that implements the Rock Ridge extensions for PyCdlib.  The
+# Rock Ridge extensions are a set of extensions for embedding POSIX semantics
+# on an ISO9660 filesystem.  Rock Ridge works by utilizing the "System Use"
+# area of the directory record to store additional metadata about files.  This
+# includes things like POSIX users, groups, ctime, mtime, atime, etc., as well
+# as the ability to have directory structures deeper than 8 and filenames longer
+# than 8.3.  Rock Ridge depends on the System Use and Sharing Protocol (SUSP),
+# which defines some standards on how to use the System Area.
+#
+# A note about versions.  PyCdlib implements version 1.12 of SUSP.  It implements
+# both version 1.09 and 1.12 of Rock Ridge itself.  This is slightly strange,
+# but genisoimage (which is what pycdlib compares itself against) implements 1.09,
+# so we keep support for both.
+class RockRidge(object):
+    '''
+    A class representing Rock Ridge entries.
+    '''
+    def __init__(self):
+        self.dr_entries = RockRidgeEntries()
+        self.ce_entries = RockRidgeEntries()
+        self.cl_to_moved_dr = None
+        self.moved_to_cl_dr = None
         self.parent_link = None
         self.rr_version = None
-        self.initialized = False
+        self.ce_block = None
+        self._initialized = False
 
-    def _parse(self, record, bytes_to_skip, is_first_dir_record_of_root):
+    def has_entry(self, name):
         '''
-        Internal method to parse a rock ridge record.
+        An internal method to tell if we have already parsed an entry of the
+        named type.
+
+        Parameters:
+         name - The name of the entry to check.
+        Returns:
+         True if we have already parsed an entry of the named type, False otherwise.
+        '''
+        return getattr(self.dr_entries, name) or getattr(self.ce_entries, name)
+
+    def parse(self, record, is_first_dir_record_of_root, bytes_to_skip, continuation):
+        '''
+        Method to parse a rock ridge record.
 
         Parameters:
          record - The record to parse.
-         bytes_to_skip - The number of bytes to skip at the beginning of the
-                         record.
          is_first_dir_record_of_root - Whether this is the first directory
                                        record of the root directory record;
                                        certain Rock Ridge entries are only
                                        valid there.
+         bytes_to_skip - The number of bytes to skip at the beginning of the
+                         record.
+         continuation - Whether the new entries should go in the continuation
+                        list or in the DR list.
         Returns:
          Nothing.
         '''
+        # Note that we very explicitly do not check if self._initialized is True
+        # here; this can be called multiple times in the case where there is
+        # a continuation entry.
+
+        if continuation:
+            entry_list = self.ce_entries
+        else:
+            entry_list = self.dr_entries
+
         self.bytes_to_skip = bytes_to_skip
         offset = 0 + bytes_to_skip
         left = len(record)
@@ -1764,28 +1852,34 @@ class RockRidgeBase(object):
             elif left == 1:
                 # There may be a padding byte on the end.
                 if bytes(bytearray([record[offset]])) != b'\x00':
-                    raise pycdlibexception.PyCdlibException("Invalid pad byte")
+                    raise pycdlibexception.PyCdlibInvalidISO("Invalid pad byte")
                 break
             elif left < 4:
-                raise pycdlibexception.PyCdlibException("Not enough bytes left in the System Use field")
+                raise pycdlibexception.PyCdlibInvalidISO("Not enough bytes left in the System Use field")
 
-            (rtype, su_len, su_entry_version) = struct.unpack_from("=2sBB", record[:offset+4], offset)
+            (rtype, su_len, su_entry_version) = struct.unpack_from("=2sBB", record[:offset + 4], offset)
             if su_entry_version != SU_ENTRY_VERSION:
-                raise pycdlibexception.PyCdlibException("Invalid RR version %d!" % su_entry_version)
+                raise pycdlibexception.PyCdlibInvalidISO("Invalid RR version %d!" % su_entry_version)
 
             if rtype == b'SP':
                 if left < 7 or not is_first_dir_record_of_root:
-                    raise pycdlibexception.PyCdlibException("Invalid SUSP SP record")
+                    raise pycdlibexception.PyCdlibInvalidISO("Invalid SUSP SP record")
+
+                if self.has_entry('sp_record'):
+                    raise pycdlibexception.PyCdlibInvalidISO("Only single SP record supported")
 
                 # OK, this is the first Directory Record of the root
                 # directory, which means we should check it for the SUSP/RR
                 # extension, which is exactly 7 bytes and starts with 'SP'.
 
-                self.sp_record = RRSPRecord()
-                self.sp_record.parse(record[offset:])
+                entry_list.sp_record = RRSPRecord()
+                entry_list.sp_record.parse(record[offset:])
             elif rtype == b'RR':
-                self.rr_record = RRRRRecord()
-                self.rr_record.parse(record[offset:])
+                if self.has_entry('rr_record'):
+                    raise pycdlibexception.PyCdlibInvalidISO("Only single RR record supported")
+
+                entry_list.rr_record = RRRRRecord()
+                entry_list.rr_record.parse(record[offset:])
                 # The RR Record only exists in the 1.09 specification.  However,
                 # we have seen ISOs in the wild (OpenSolaris 2008) that put an
                 # RR Record into a 1.12 ISO.  Therefore, if no previous version
@@ -1795,11 +1889,17 @@ class RockRidgeBase(object):
                 if self.rr_version is None:
                     self.rr_version = "1.09"
             elif rtype == b'CE':
-                self.ce_record = RRCERecord()
-                self.ce_record.parse(record[offset:], self.rr_version)
+                if self.has_entry('ce_record'):
+                    raise pycdlibexception.PyCdlibInvalidISO("Only single CE record supported")
+
+                entry_list.ce_record = RRCERecord()
+                entry_list.ce_record.parse(record[offset:])
             elif rtype == b'PX':
-                self.px_record = RRPXRecord()
-                version = self.px_record.parse(record[offset:])
+                if self.has_entry('px_record'):
+                    raise pycdlibexception.PyCdlibInvalidISO("Only single PX record supported")
+
+                entry_list.px_record = RRPXRecord()
+                version = entry_list.px_record.parse(record[offset:])
                 # See the comment above in the RR handling for why the logic
                 # is as follows.
                 if self.rr_version is None:
@@ -1808,50 +1908,74 @@ class RockRidgeBase(object):
                     if self.rr_version == "1.09" and version == "1.12":
                         self.rr_version = "1.12"
                     elif self.rr_version != version:
-                        raise pycdlibexception.PyCdlibException("PX record doesn't agree with Rock Ridge version")
+                        raise pycdlibexception.PyCdlibInvalidISO("PX record doesn't agree with Rock Ridge version")
             elif rtype == b'PD':
                 # no work to do here
                 pass
             elif rtype == b'ST':
                 if su_len != 4:
-                    raise pycdlibexception.PyCdlibException("Invalid length on rock ridge extension")
+                    raise pycdlibexception.PyCdlibInvalidISO("Invalid length on rock ridge extension")
             elif rtype == b'ER':
-                self.er_record = RRERRecord()
-                self.er_record.parse(record[offset:])
+                if self.has_entry('er_record'):
+                    raise pycdlibexception.PyCdlibInvalidISO("Only single ER record supported")
+
+                entry_list.er_record = RRERRecord()
+                entry_list.er_record.parse(record[offset:])
             elif rtype == b'ES':
-                self.es_record = RRESRecord()
-                self.es_record.parse(record[offset:])
+                if self.has_entry('es_record'):
+                    raise pycdlibexception.PyCdlibInvalidISO("Only single ES record supported")
+
+                entry_list.es_record = RRESRecord()
+                entry_list.es_record.parse(record[offset:])
             elif rtype == b'PN':
-                self.pn_record = RRPNRecord()
-                self.pn_record.parse(record[offset:])
+                if self.has_entry('pn_record'):
+                    raise pycdlibexception.PyCdlibInvalidISO("Only single PN record supported")
+
+                entry_list.pn_record = RRPNRecord()
+                entry_list.pn_record.parse(record[offset:])
             elif rtype == b'SL':
                 new_sl_record = RRSLRecord()
                 previous_continued = False
-                if len(self.sl_records) > 0:
-                    previous_continued = self.sl_records[-1].last_component_continued()
+                if entry_list.sl_records:
+                    previous_continued = entry_list.sl_records[-1].last_component_continued()
                 new_sl_record.parse(record[offset:], previous_continued)
-                self.sl_records.append(new_sl_record)
+                entry_list.sl_records.append(new_sl_record)
             elif rtype == b'NM':
                 new_nm_record = RRNMRecord()
                 new_nm_record.parse(record[offset:])
-                self.nm_records.append(new_nm_record)
+                entry_list.nm_records.append(new_nm_record)
             elif rtype == b'CL':
-                self.cl_record = RRCLRecord()
-                self.cl_record.parse(record[offset:])
+                if self.has_entry('cl_record'):
+                    raise pycdlibexception.PyCdlibInvalidISO("Only single CL record supported")
+
+                entry_list.cl_record = RRCLRecord()
+                entry_list.cl_record.parse(record[offset:])
             elif rtype == b'PL':
-                self.pl_record = RRPLRecord()
-                self.pl_record.parse(record[offset:])
+                if self.has_entry('pl_record'):
+                    raise pycdlibexception.PyCdlibInvalidISO("Only single PL record supported")
+
+                entry_list.pl_record = RRPLRecord()
+                entry_list.pl_record.parse(record[offset:])
             elif rtype == b'RE':
-                self.re_record = RRRERecord()
-                self.re_record.parse(record[offset:])
+                if self.has_entry('re_record'):
+                    raise pycdlibexception.PyCdlibInvalidISO("Only single RE record supported")
+
+                entry_list.re_record = RRRERecord()
+                entry_list.re_record.parse(record[offset:])
             elif rtype == b'TF':
-                self.tf_record = RRTFRecord()
-                self.tf_record.parse(record[offset:])
+                if self.has_entry('tf_record'):
+                    raise pycdlibexception.PyCdlibInvalidISO("Only single TF record supported")
+
+                entry_list.tf_record = RRTFRecord()
+                entry_list.tf_record.parse(record[offset:])
             elif rtype == b'SF':
-                self.sf_record = RRSFRecord()
-                self.sf_record.parse(record[offset:])
+                if self.has_entry('sf_record'):
+                    raise pycdlibexception.PyCdlibInvalidISO("Only single SF record supported")
+
+                entry_list.sf_record = RRSFRecord()
+                entry_list.sf_record.parse(record[offset:])
             else:
-                raise pycdlibexception.PyCdlibException("Unknown SUSP record")
+                raise pycdlibexception.PyCdlibInvalidISO("Unknown SUSP record")
             offset += su_len
             left -= su_len
 
@@ -1860,9 +1984,14 @@ class RockRidgeBase(object):
             # that this is a 1.12 version of Rock Ridge.
             self.rr_version = "1.12"
         self.su_entry_version = 1
-        self.initialized = True
 
-    def record(self):
+        namelist = [nm.posix_name for nm in self.dr_entries.nm_records]
+        namelist.extend([nm.posix_name for nm in self.ce_entries.nm_records])
+        self._full_name = b"".join(namelist)
+
+        self._initialized = True
+
+    def _record(self, entries):
         '''
         Return a string representing the Rock Ridge entry.
 
@@ -1871,155 +2000,70 @@ class RockRidgeBase(object):
         Returns:
          A string representing the Rock Ridge entry.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Rock Ridge extension not yet initialized")
 
         outlist = []
-        if self.sp_record is not None:
-            outlist.append(self.sp_record.record())
+        if entries.sp_record is not None:
+            outlist.append(entries.sp_record.record())
 
-        if self.rr_record is not None:
-            outlist.append(self.rr_record.record())
+        if entries.rr_record is not None:
+            outlist.append(entries.rr_record.record())
 
-        for nm_record in self.nm_records:
+        for nm_record in entries.nm_records:
             outlist.append(nm_record.record())
 
-        if self.px_record is not None:
-            outlist.append(self.px_record.record(self.rr_version))
+        if entries.px_record is not None:
+            outlist.append(entries.px_record.record(self.rr_version))
 
-        for sl_record in self.sl_records:
+        for sl_record in entries.sl_records:
             outlist.append(sl_record.record())
 
-        if self.tf_record is not None:
-            outlist.append(self.tf_record.record())
+        if entries.tf_record is not None:
+            outlist.append(entries.tf_record.record())
 
-        if self.cl_record is not None:
-            outlist.append(self.cl_record.record())
+        if entries.cl_record is not None:
+            outlist.append(entries.cl_record.record())
 
-        if self.pl_record is not None:
-            outlist.append(self.pl_record.record())
+        if entries.pl_record is not None:
+            outlist.append(entries.pl_record.record())
 
-        if self.re_record is not None:
-            outlist.append(self.re_record.record())
+        if entries.re_record is not None:
+            outlist.append(entries.re_record.record())
 
-        if self.er_record is not None:
-            outlist.append(self.er_record.record())
+        if entries.er_record is not None:
+            outlist.append(entries.er_record.record())
 
-        if self.ce_record is not None:
-            outlist.append(self.ce_record.record())
+        if entries.ce_record is not None:
+            outlist.append(entries.ce_record.record())
 
         return b"".join(outlist)
 
-class RockRidgeContinuation(RockRidgeBase):
-    '''
-    A class representing a Rock Ridge continuation entry (inherits from
-    RockRigeBase).
-    '''
-    def __init__(self, rr_version):
-        RockRidgeBase.__init__(self)
-
-        # The new extent location will be set by _reshuffle_extents().
-        self.orig_extent_loc = None
-        self.new_extent_loc = None
-
-        # The offset will get updated during _reshuffle_extents().
-        self.continue_offset = 0
-
-        self.continue_length = 0
-
-        self.su_entry_version = 1
-
-        self.rr_version = rr_version
-
-        self.initialized = True
-
-    def extent_location(self):
+    def record_dr_entries(self):
         '''
-        Get the extent location of this Rock Ridge Continuation entry.
+        Return a string representing the Rock Ridge entries in the Directory Record.
 
         Parameters:
          None.
         Returns:
-         An integer extent location for this continuation entry.
+         A string representing the Rock Ridge entry.
         '''
-        if self.new_extent_loc is None and self.orig_extent_loc is None:
-            raise pycdlibexception.PyCdlibException("No extent assigned to Rock Ridge Continuation!")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Rock Ridge extension not yet initialized")
 
-        if self.new_extent_loc is None:
-            return self.orig_extent_loc
-        return self.new_extent_loc
+        return self._record(self.dr_entries)
 
-    def offset(self):
+    def record_ce_entries(self):
         '''
-        Get the offset from the beginning of the extent for this Rock Ridge
-        Continuation entry.
+        Return a string representing the Rock Ridge entries in the Continuation Entry.
 
         Parameters:
          None.
         Returns:
-         An integer representing the offset from the beginning of the extent.
+         A string representing the Rock Ridge entry.
         '''
-        return self.continue_offset
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Rock Ridge extension not yet initialized")
 
-    def length(self):
-        '''
-        Get the length of this continuation entry.
-
-        Parameters:
-         None.
-        Returns:
-         An integer representing the length of this continuation entry.
-        '''
-        return self.continue_length
-
-    def increment_length(self, length):
-        '''
-        Add a certain amount to the length of this continuation entry.
-
-        Parameters:
-         length - The length to add to this continuation entry.
-        Returns:
-         Nothing.
-        '''
-        self.continue_length += length
-
-    def parse(self, record, bytes_to_skip):
-        '''
-        Parse a Rock Ridge continuation entry out of a string.
-
-        Parameters:
-         record - The string to parse.
-         bytes_to_skip - The number of bytes to skip before parsing.
-        Returns:
-         Nothing.
-        '''
-        self.new_extent_loc = None
-
-        self._parse(record, bytes_to_skip, False)
-
-class RockRidge(RockRidgeBase):
-    '''
-    A class representing a Rock Ridge entry.
-    '''
-    def parse(self, record, is_first_dir_record_of_root, bytes_to_skip):
-        '''
-        A method to parse a rock ridge record.
-
-        Parameters:
-         record - The record to parse.
-         is_first_dir_record_of_root - Whether this is the first directory
-                                       record of the root directory record;
-                                       certain Rock Ridge entries are only
-                                       valid there.
-         bytes_to_skip - The number of bytes to skip at the beginning of the
-                         record.
-        Returns:
-         Nothing.
-        '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("Rock Ridge extension already initialized")
-
-        self._parse(record, bytes_to_skip, is_first_dir_record_of_root)
+        return self._record(self.ce_entries)
 
     def new(self, is_first_dir_record_of_root, rr_name, isdir, symlink_path,
             rr_version, rr_relocated_child, rr_relocated, rr_relocated_parent,
@@ -2048,11 +2092,11 @@ class RockRidge(RockRidgeBase):
          The length of the directory record after the Rock Ridge extension has
          been added.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("Rock Ridge extension already initialized")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Rock Ridge extension already initialized")
 
         if rr_version != "1.09" and rr_version != "1.12":
-            raise pycdlibexception.PyCdlibException("Only Rock Ridge versions 1.09 and 1.12 are implemented")
+            raise pycdlibexception.PyCdlibInvalidInput("Only Rock Ridge versions 1.09 and 1.12 are implemented")
 
         self.rr_version = rr_version
 
@@ -2061,39 +2105,6 @@ class RockRidge(RockRidgeBase):
         EXT_ID = b"RRIP_1991A"
         EXT_DES = b"THE ROCK RIDGE INTERCHANGE PROTOCOL PROVIDES SUPPORT FOR POSIX FILE SYSTEM SEMANTICS"
         EXT_SRC = b"PLEASE CONTACT DISC PUBLISHER FOR SPECIFICATION SOURCE.  SEE PUBLISHER IDENTIFIER IN PRIMARY VOLUME DESCRIPTOR FOR CONTACT INFORMATION."
-
-        class dr_len(object):
-            '''
-            An internal class to make the directory record length have the same
-            interface as a continuation entry.
-            '''
-            def __init__(self, _length):
-                self._length = _length
-
-            def length(self):
-                '''
-                Get the length of the directory record.
-
-                Parameters:
-                 None.
-                Returns:
-                 An integer representing the length of the directory record.
-                '''
-                return self._length
-
-            def increment_length(self, _length):
-                '''
-                Add a certain amount to the length of the directory record.
-
-                Parameters:
-                 length - The length to add to the directory record.
-                Returns:
-                 Nothing.
-                '''
-                self._length += _length
-
-                if self._length > 255:
-                    raise pycdlibexception.PyCdlibException("Incremented too far!")
 
         self.su_entry_version = 1
 
@@ -2131,34 +2142,35 @@ class RockRidge(RockRidgeBase):
         if is_first_dir_record_of_root:
             tmp_dr_len += RRERRecord.length(EXT_ID, EXT_DES, EXT_SRC)
 
-        this_dr_len = dr_len(curr_dr_len)
-
         if tmp_dr_len > ALLOWED_DR_SIZE:
-            self.ce_record = RRCERecord()
-            self.ce_record.new(self.rr_version)
-            this_dr_len.increment_length(RRCERecord.length())
+            self.dr_entries.ce_record = RRCERecord()
+            self.dr_entries.ce_record.new()
+            curr_dr_len += RRCERecord.length()
 
         # For SP record
         if is_first_dir_record_of_root:
             new_sp = RRSPRecord()
             new_sp.new(bytes_to_skip)
             thislen = RRSPRecord.length()
-            if this_dr_len.length() + thislen > ALLOWED_DR_SIZE:
-                self.ce_record.add_record('sp_record', new_sp, thislen)
+            if curr_dr_len + thislen > ALLOWED_DR_SIZE:
+                self.dr_entries.ce_record.add_record(thislen)
+                self.ce_entries.sp_record = new_sp
             else:
-                self.sp_record = new_sp
-                this_dr_len.increment_length(thislen)
+                curr_dr_len += thislen
+                self.dr_entries.sp_record = new_sp
 
         # For RR record
+        rr_record = None
         if rr_version == "1.09":
-            new_rr = RRRRRecord()
-            new_rr.new()
+            rr_record = RRRRRecord()
+            rr_record.new()
             thislen = RRRRRecord.length()
-            if this_dr_len.length() + thislen > ALLOWED_DR_SIZE:
-                self.ce_record.add_record('rr_record', new_rr, thislen)
+            if curr_dr_len + thislen > ALLOWED_DR_SIZE:
+                self.dr_entries.ce_record.add_record(thislen)
+                self.ce_entries.rr_record = rr_record
             else:
-                self.rr_record = new_rr
-                this_dr_len.increment_length(thislen)
+                curr_dr_len += thislen
+                self.dr_entries.rr_record = rr_record
 
         # For NM record
         if rr_name is not None:
@@ -2175,11 +2187,11 @@ class RockRidge(RockRidgeBase):
             # records we ever put in place could be the SP or the RR
             # record, and the combination of them is never > 203, so we
             # will always put some NM data in here.
-            len_here = ALLOWED_DR_SIZE - this_dr_len.length() - 5
+            len_here = ALLOWED_DR_SIZE - curr_dr_len - 5
             curr_nm = RRNMRecord()
             curr_nm.new(rr_name[:len_here])
-            self.nm_records.append(curr_nm)
-            this_dr_len.increment_length(RRNMRecord.length(rr_name[:len_here]))
+            self.dr_entries.nm_records.append(curr_nm)
+            curr_dr_len += RRNMRecord.length(rr_name[:len_here])
 
             offset = len_here
             while offset < len(rr_name):
@@ -2190,27 +2202,28 @@ class RockRidge(RockRidgeBase):
                 length = min(len(rr_name[offset:]), 250)
 
                 curr_nm = RRNMRecord()
-                curr_nm.new(rr_name[offset:offset+length])
-                self.ce_record.continuation_entry.nm_records.append(curr_nm)
-                self.ce_record.continuation_entry.increment_length(RRNMRecord.length(rr_name[offset:offset+length]))
+                curr_nm.new(rr_name[offset:offset + length])
+                self.ce_entries.nm_records.append(curr_nm)
+                self.dr_entries.ce_record.add_record(RRNMRecord.length(rr_name[offset:offset + length]))
 
                 offset += length
 
-            if self.rr_record is not None:
-                self.rr_record.append_field("NM")
+            if rr_record is not None:
+                rr_record.append_field("NM")
 
         # For PX record
         new_px = RRPXRecord()
         new_px.new(isdir, symlink_path)
         thislen = RRPXRecord.length(self.rr_version)
-        if this_dr_len.length() + thislen > ALLOWED_DR_SIZE:
-            self.ce_record.add_record('px_record', new_px, thislen)
+        if curr_dr_len + thislen > ALLOWED_DR_SIZE:
+            self.dr_entries.ce_record.add_record(thislen)
+            self.ce_entries.px_record = new_px
         else:
-            self.px_record = new_px
-            this_dr_len.increment_length(thislen)
+            curr_dr_len += thislen
+            self.dr_entries.px_record = new_px
 
-        if self.rr_record is not None:
-            self.rr_record.append_field("PX")
+        if rr_record is not None:
+            rr_record.append_field("PX")
 
         # For SL record
         if symlink_path is not None:
@@ -2234,24 +2247,40 @@ class RockRidge(RockRidgeBase):
             sl_rec_header_len = RRSLRecord.header_length()
 
             thislen = RRSLRecord.length([b'a'])
-            if this_dr_len.length() + thislen < ALLOWED_DR_SIZE:
+            if curr_dr_len + thislen < ALLOWED_DR_SIZE:
                 # There is enough room in the directory record for at least
                 # part of the symlink
-                curr_comp_area_length = ALLOWED_DR_SIZE - this_dr_len.length() - sl_rec_header_len
-                self.sl_records.append(curr_sl)
-                meta_record_len = this_dr_len
+                curr_comp_area_length = ALLOWED_DR_SIZE - curr_dr_len - sl_rec_header_len
+                self.dr_entries.sl_records.append(curr_sl)
+                curr_dr_len += sl_rec_header_len
+                sl_in_dr = True
             else:
-                # Note enough room in the directory record, so proceed to
+                # Not enough room in the directory record, so proceed to
                 # the continuation entry directly.
                 curr_comp_area_length = RRSLRecord.maximum_component_area_length()
-                self.ce_record.continuation_entry.sl_records.append(curr_sl)
-                meta_record_len = self.ce_record.continuation_entry
+                self.ce_entries.sl_records.append(curr_sl)
+                self.dr_entries.ce_record.add_record(sl_rec_header_len)
+                sl_in_dr = False
 
-            meta_record_len.increment_length(sl_rec_header_len)
-            for comp in symlink_path.split(b'/'):
+            for index, comp in enumerate(symlink_path.split(b'/')):
+                special = False
+                if index == 0 and comp == b'':
+                    comp = b'/'
+                    special = True
+                    mincomp = comp
+                elif comp == b'.':
+                    special = True
+                    mincomp = comp
+                elif comp == b'..':
+                    special = True
+                    mincomp = comp
+                else:
+                    mincomp = b'a'
+
                 offset = 0
-                while offset < len(comp):
-                    minimum = RRSLRecord.Component.length(b'a')
+                done = False
+                while not done:
+                    minimum = RRSLRecord.Component.length(mincomp)
                     if minimum > curr_comp_area_length:
                         # There wasn't enough room in the last SL record
                         # for more data.  Set the "continued" flag on the old
@@ -2266,91 +2295,129 @@ class RockRidge(RockRidgeBase):
 
                         curr_sl = RRSLRecord()
                         curr_sl.new()
-                        self.ce_record.continuation_entry.sl_records.append(curr_sl)
-                        meta_record_len = self.ce_record.continuation_entry
-                        meta_record_len.increment_length(sl_rec_header_len)
+                        self.ce_entries.sl_records.append(curr_sl)
                         curr_comp_area_length = RRSLRecord.maximum_component_area_length()
+                        self.dr_entries.ce_record.add_record(sl_rec_header_len)
+                        sl_in_dr = False
 
-                    complen = RRSLRecord.Component.length(comp[offset:])
-                    if complen > curr_comp_area_length:
-                        length = curr_comp_area_length - 2
+                    if special:
+                        complen = minimum
+                        length = 0
                     else:
-                        length = complen
+                        complen = RRSLRecord.Component.length(comp[offset:])
+                        if complen > curr_comp_area_length:
+                            length = curr_comp_area_length - 2
+                        else:
+                            length = complen
 
-                    curr_sl.add_component(comp[offset:offset+length])
-                    meta_record_len.increment_length(RRSLRecord.Component.length(comp[offset:offset+length]))
+                    if special:
+                        compslice = comp
+                    else:
+                        compslice = comp[offset:offset + length]
+
+                    curr_sl.add_component(compslice)
+
+                    if sl_in_dr:
+                        curr_dr_len += RRSLRecord.Component.length(compslice)
+                    else:
+                        self.dr_entries.ce_record.add_record(RRSLRecord.Component.length(compslice))
 
                     offset += length
+
                     curr_comp_area_length = curr_comp_area_length - length - 2
 
-            if self.rr_record is not None:
-                self.rr_record.append_field("SL")
+                    if special:
+                        done = True
+                    else:
+                        if offset >= len(comp):
+                            done = True
+
+            if rr_record is not None:
+                rr_record.append_field("SL")
 
         # For TF record
         new_tf = RRTFRecord()
         new_tf.new(TF_FLAGS)
         thislen = RRTFRecord.length(TF_FLAGS)
-        if this_dr_len.length() + thislen > ALLOWED_DR_SIZE:
-            self.ce_record.add_record('tf_record', new_tf, thislen)
+        if curr_dr_len + thislen > ALLOWED_DR_SIZE:
+            self.dr_entries.ce_record.add_record(thislen)
+            self.ce_entries.tf_record = new_tf
         else:
-            self.tf_record = new_tf
-            this_dr_len.increment_length(thislen)
+            curr_dr_len += thislen
+            self.dr_entries.tf_record = new_tf
 
-        if self.rr_record is not None:
-            self.rr_record.append_field("TF")
+        if rr_record is not None:
+            rr_record.append_field("TF")
 
         # For CL record
         if rr_relocated_child:
             new_cl = RRCLRecord()
             new_cl.new()
             thislen = RRCLRecord.length()
-            if this_dr_len.length() + thislen > ALLOWED_DR_SIZE:
-                self.ce_record.continuation_entry.cl_record = new_cl
-                self.ce_record.continuation_entry.increment_length(thislen)
+            if curr_dr_len + thislen > ALLOWED_DR_SIZE:
+                self.dr_entries.ce_record.add_record(thislen)
+                self.ce_entries.cl_record = new_cl
             else:
-                self.cl_record = new_cl
-                this_dr_len.increment_length(thislen)
+                curr_dr_len += thislen
+                self.dr_entries.cl_record = new_cl
+
+            if rr_record is not None:
+                rr_record.append_field("CL")
 
         # For RE record
         if rr_relocated:
             new_re = RRRERecord()
             new_re.new()
             thislen = RRRERecord.length()
-            if this_dr_len.length() + thislen > ALLOWED_DR_SIZE:
-                self.ce_record.continuation_entry.re_record = new_re
-                self.ce_record.continuation_entry.increment_length(thislen)
+            if curr_dr_len + thislen > ALLOWED_DR_SIZE:
+                self.dr_entries.ce_record.add_record(thislen)
+                self.ce_entries.re_record = new_re
             else:
-                self.re_record = new_re
-                this_dr_len.increment_length(thislen)
+                curr_dr_len += thislen
+                self.dr_entries.re_record = new_re
+
+            if rr_record is not None:
+                rr_record.append_field("RE")
 
         # For PL record
         if rr_relocated_parent:
             new_pl = RRPLRecord()
             new_pl.new()
             thislen = RRPLRecord.length()
-            if this_dr_len.length() + thislen > ALLOWED_DR_SIZE:
-                self.ce_record.continuation_entry.pl_record = new_pl
-                self.ce_record.continuation_entry.increment_length(thislen)
+            if curr_dr_len + thislen > ALLOWED_DR_SIZE:
+                self.dr_entries.ce_record.add_record(thislen)
+                self.ce_entries.pl_record = new_pl
             else:
-                self.pl_record = new_pl
-                this_dr_len.increment_length(thislen)
+                curr_dr_len += thislen
+                self.dr_entries.pl_record = new_pl
+
+            if rr_record is not None:
+                rr_record.append_field("PL")
 
         # For ER record
         if is_first_dir_record_of_root:
             new_er = RRERRecord()
             new_er.new(EXT_ID, EXT_DES, EXT_SRC)
             thislen = RRERRecord.length(EXT_ID, EXT_DES, EXT_SRC)
-            if this_dr_len.length() + thislen > ALLOWED_DR_SIZE:
-                self.ce_record.add_record('er_record', new_er, thislen)
+            if curr_dr_len + thislen > ALLOWED_DR_SIZE:
+                self.dr_entries.ce_record.add_record(thislen)
+                self.ce_entries.er_record = new_er
             else:
-                self.er_record = new_er
-                this_dr_len.increment_length(thislen)
+                curr_dr_len += thislen
+                self.dr_entries.er_record = new_er
 
-        self.initialized = True
+        self._initialized = True
 
-        this_dr_len.increment_length(this_dr_len.length() % 2)
+        curr_dr_len += (curr_dr_len % 2)
 
-        return this_dr_len.length()
+        if curr_dr_len > 255:
+            raise pycdlibexception.PyCdlibInternalError("Rock Ridge entry increased DR length too far")
+
+        namelist = [nm.posix_name for nm in self.dr_entries.nm_records]
+        namelist.extend([nm.posix_name for nm in self.ce_entries.nm_records])
+        self._full_name = b"".join(namelist)
+
+        return curr_dr_len
 
     def add_to_file_links(self):
         '''
@@ -2361,15 +2428,15 @@ class RockRidge(RockRidgeBase):
         Returns:
          Nothing.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Rock Ridge extension not yet initialized")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Rock Ridge extension not yet initialized")
 
-        if self.px_record is None:
-            if self.ce_record is None:
-                raise pycdlibexception.PyCdlibException("No Rock Ridge file links and no continuation entry")
-            self.ce_record.continuation_entry.px_record.posix_file_links += 1
+        if self.dr_entries.px_record is None:
+            if self.ce_entries.px_record is None:
+                raise pycdlibexception.PyCdlibInvalidInput("No Rock Ridge file links")
+            self.ce_entries.px_record.posix_file_links += 1
         else:
-            self.px_record.posix_file_links += 1
+            self.dr_entries.px_record.posix_file_links += 1
 
     def remove_from_file_links(self):
         '''
@@ -2380,15 +2447,15 @@ class RockRidge(RockRidgeBase):
         Returns:
          Nothing.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Rock Ridge extension not yet initialized")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Rock Ridge extension not yet initialized")
 
-        if self.px_record is None:
-            if self.ce_record is None:
-                raise pycdlibexception.PyCdlibException("No Rock Ridge file links and no continuation entry")
-            self.ce_record.continuation_entry.px_record.posix_file_links -= 1
+        if self.dr_entries.px_record is None:
+            if self.ce_entries.px_record is None:
+                raise pycdlibexception.PyCdlibInvalidInput("No Rock Ridge file links")
+            self.ce_entries.px_record.posix_file_links -= 1
         else:
-            self.px_record.posix_file_links -= 1
+            self.dr_entries.px_record.posix_file_links -= 1
 
     def copy_file_links(self, src):
         '''
@@ -2400,24 +2467,24 @@ class RockRidge(RockRidgeBase):
         Returns:
          Nothing.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Rock Ridge extension not yet initialized")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Rock Ridge extension not yet initialized")
 
         # First, get the src data
-        if src.px_record is None:
-            if src.ce_record is None:
-                raise pycdlibexception.PyCdlibException("No Rock Ridge file links and no continuation entry")
-            num_links = src.ce_record.continuation_entry.px_record.posix_file_links
+        if src.dr_entries.px_record is None:
+            if src.ce_entries.px_record is None:
+                raise pycdlibexception.PyCdlibInvalidInput("No Rock Ridge file links")
+            num_links = src.ce_entries.px_record.posix_file_links
         else:
-            num_links = src.px_record.posix_file_links
+            num_links = src.dr_entries.px_record.posix_file_links
 
         # Now apply it to this record.
-        if self.px_record is None:
-            if self.ce_record is None:
-                raise pycdlibexception.PyCdlibException("No Rock Ridge file links and no continuation entry")
-            self.ce_record.continuation_entry.px_record.posix_file_links = num_links
+        if self.dr_entries.px_record is None:
+            if self.ce_entries.px_record is None:
+                raise pycdlibexception.PyCdlibInvalidInput("No Rock Ridge file links")
+            self.ce_entries.px_record.posix_file_links = num_links
         else:
-            self.px_record.posix_file_links = num_links
+            self.dr_entries.px_record.posix_file_links = num_links
 
     def name(self):
         '''
@@ -2428,23 +2495,16 @@ class RockRidge(RockRidgeBase):
         Returns:
          The alternate name from this Rock Ridge entry.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Rock Ridge extension not yet initialized")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Rock Ridge extension not yet initialized")
 
-        outlist = []
-        for nm in self.nm_records:
-            outlist.append(nm.posix_name)
-        if self.ce_record is not None:
-            for nm in self.ce_record.continuation_entry.nm_records:
-                outlist.append(nm.posix_name)
-
-        return b"".join(outlist)
+        return self._full_name
 
     def _is_symlink(self):
         '''
         Internal method to determine whether this Rock Ridge entry is a symlink.
         '''
-        return self.sl_records != [] or (self.ce_record is not None and self.ce_record.continuation_entry.sl_records != [])
+        return len(self.dr_entries.sl_records) > 0 or len(self.ce_entries.sl_records) > 0
 
     def is_symlink(self):
         '''
@@ -2455,8 +2515,8 @@ class RockRidge(RockRidgeBase):
         Returns:
          True if this Rock Ridge entry describes a symlink, False otherwise.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Rock Ridge extension not yet initialized")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Rock Ridge extension not yet initialized")
 
         return self._is_symlink()
 
@@ -2470,19 +2530,15 @@ class RockRidge(RockRidgeBase):
         Returns:
          Symlink path as a string.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Rock Ridge extension not yet initialized")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Rock Ridge extension not yet initialized")
 
         if not self.is_symlink():
-            raise pycdlibexception.PyCdlibException("Entry is not a symlink!")
-
-        extra_recs = []
-        if self.ce_record is not None:
-            extra_recs = self.ce_record.continuation_entry.sl_records
+            raise pycdlibexception.PyCdlibInvalidInput("Entry is not a symlink!")
 
         outlist = []
         saved = b''
-        for rec in self.sl_records + extra_recs:
+        for rec in self.dr_entries.sl_records + self.ce_entries.sl_records:
             if rec.last_component_continued():
                 saved += rec.name()
             else:
@@ -2490,12 +2546,12 @@ class RockRidge(RockRidgeBase):
                 outlist.append(saved)
                 saved = b''
 
-        # FIXME: what if there is data in "saved" at the end of the loop?
-        # This really shouldn't happen (it would mean a malformed ISO), but
-        # still, what should we do?
+        if saved != b'':
+            raise pycdlibexception.PyCdlibInvalidISO("Saw a continued symlink record with no end; ISO is probably malformed")
+
         return b"/".join(outlist)
 
-    def has_child_link_record(self):
+    def child_link_record_exists(self):
         '''
         Determine whether this Rock Ridge entry has a child link record (used
         for relocating deep directory records).
@@ -2505,54 +2561,12 @@ class RockRidge(RockRidgeBase):
         Returns:
          True if this Rock Ridge entry has a child link record, False otherwise.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Rock Ridge extension not yet initialized")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Rock Ridge extension not yet initialized")
 
-        ret = self.cl_record is not None
-        if self.ce_record is not None:
-            ret = ret or self.ce_record.continuation_entry.cl_record is not None
+        return self.dr_entries.cl_record is not None or self.ce_entries.cl_record is not None
 
-        return ret
-
-    def has_parent_link_record(self):
-        '''
-        Determine whether this Rock Ridge entry has a parent link record (used
-        for relocating deep directory records).
-
-        Parameters:
-         None:
-        Returns:
-         True if this Rock Ridge entry has a parent link record, False otherwise.
-        '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Rock Ridge extension not yet initialized")
-
-        ret = self.pl_record is not None
-        if self.ce_record is not None:
-            ret = ret or self.ce_record.continuation_entry.pl_record is not None
-
-        return ret
-
-    def relocated_record(self):
-        '''
-        Determine whether this Rock Ridge entry has a relocated record (used for
-        relocating deep directory records).
-
-        Parameters:
-         None.
-        Returns:
-         True if this Rock Ridge entry has a relocated record, False otherwise.
-        '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Rock Ridge extension not yet initialized")
-
-        ret = self.re_record is not None
-        if self.ce_record is not None:
-            ret = ret or self.ce_record.continuation_entry.re_record is not None
-
-        return ret
-
-    def update_child_link(self):
+    def child_link_update_from_dirrecord(self):
         '''
         Update the logical extent number stored in the child link record (if
         there is one), from the directory record entry that was stored in
@@ -2564,21 +2578,54 @@ class RockRidge(RockRidgeBase):
         Returns:
          Nothing.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Rock Ridge extension not yet initialized")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Rock Ridge extension not yet initialized")
 
-        if self.child_link is None:
-            raise pycdlibexception.PyCdlibException("No child link found!")
+        if self.cl_to_moved_dr is None:
+            raise pycdlibexception.PyCdlibInvalidInput("No child link found!")
 
-        if self.cl_record is not None:
-            self.cl_record.set_log_block_num(self.child_link.extent_location())
+        if self.dr_entries.cl_record is not None:
+            self.dr_entries.cl_record.set_log_block_num(self.cl_to_moved_dr.extent_location())
+        elif self.ce_entries.cl_record is not None:
+            self.ce_entries.cl_record.set_log_block_num(self.cl_to_moved_dr.extent_location())
         else:
-            if self.ce_record is not None and self.ce_record.continuation_entry.cl_record is not None:
-                self.ce_record.continuation_entry.cl_record.set_log_block_num(self.child_link.extent_location())
-            else:
-                raise pycdlibexception.PyCdlibException("Could not find child link record!")
+            raise pycdlibexception.PyCdlibInvalidInput("Could not find child link record!")
 
-    def update_parent_link(self):
+    def child_link_extent(self):
+        '''
+        Get the extent of the child of this entry if it has one.
+
+        Parameters:
+         None.
+        Returns:
+         The logical block number of the child if it exists.
+        '''
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Rock Ridge extension not yet initialized")
+
+        if self.dr_entries.cl_record is not None:
+            return self.dr_entries.cl_record.child_log_block_num
+        elif self.ce_entries.cl_record is not None:
+            return self.ce_entries.cl_record.child_log_block_num
+
+        raise pycdlibexception.PyCdlibInternalError("Asked for child extent for non-existent parent record")
+
+    def parent_link_record_exists(self):
+        '''
+        Determine whether this Rock Ridge entry has a parent link record (used
+        for relocating deep directory records).
+
+        Parameters:
+         None:
+        Returns:
+         True if this Rock Ridge entry has a parent link record, False otherwise.
+        '''
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Rock Ridge extension not yet initialized")
+
+        return self.dr_entries.pl_record is not None or self.ce_entries.pl_record is not None
+
+    def parent_link_update_from_dirrecord(self):
         '''
         Update the logical extent number stored in the parent link record (if
         there is one), from the directory record entry that was stored in
@@ -2590,38 +2637,228 @@ class RockRidge(RockRidgeBase):
         Returns:
          Nothing.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Rock Ridge extension not yet initialized")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Rock Ridge extension not yet initialized")
 
         if self.parent_link is None:
-            raise pycdlibexception.PyCdlibException("No parent link found!")
+            raise pycdlibexception.PyCdlibInvalidInput("No parent link found!")
 
-        if self.pl_record is not None:
-            self.pl_record.set_log_block_num(self.parent_link.extent_location())
+        if self.dr_entries.pl_record is not None:
+            self.dr_entries.pl_record.set_log_block_num(self.parent_link.extent_location())
+        elif self.ce_entries.pl_record is not None:
+            self.ce_entries.pl_record.set_log_block_num(self.parent_link.extent_location())
         else:
-            if self.ce_record is not None and self.ce_record.continuation_entry.pl_record is not None:
-                self.ce_record.continuation_entry.pl_record.set_log_block_num(self.parent_link.extent_location())
-            else:
-                raise pycdlibexception.PyCdlibException("Could not find parent link record!")
+            raise pycdlibexception.PyCdlibInvalidInput("Could not find parent link record!")
 
-    def child_link_block_num(self):
+    def parent_link_extent(self):
         '''
-        Fetch the extent number of the child link for this Rock Ridge record
-        if one exists.
+        Get the extent of the parent of this entry if it has one.
 
         Parameters:
          None.
         Returns:
-         Extent number of the child link for this Rock Ridge record.
+         The logical block number of the parent if it exists.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Rock Ridge extension not yet initialized")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Rock Ridge extension not yet initialized")
 
-        if self.cl_record is not None:
-            return self.cl_record.child_log_block_num
+        if self.dr_entries.pl_record is not None:
+            return self.dr_entries.pl_record.parent_log_block_num
+        elif self.ce_entries.pl_record is not None:
+            return self.ce_entries.pl_record.parent_log_block_num
+
+        raise pycdlibexception.PyCdlibInternalError("Asked for parent extent for non-existent parent record")
+
+    def relocated_record(self):
+        '''
+        Determine whether this Rock Ridge entry has a relocated record (used for
+        relocating deep directory records).
+
+        Parameters:
+         None.
+        Returns:
+         True if this Rock Ridge entry has a relocated record, False otherwise.
+        '''
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Rock Ridge extension not yet initialized")
+
+        return self.dr_entries.re_record is not None or self.ce_entries.re_record is not None
+
+    def update_ce_block(self, block):
+        '''
+        Update the Continuation Entry block object used by this Rock Ridge Record.
+
+        Parameters:
+         block - The new block object.
+        Returns:
+         Nothing.
+        '''
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Rock Ridge extension not yet initialized")
+
+        self.ce_block = block
+
+
+class RockRidgeContinuationEntry(object):
+    '''
+    A class representing one "abstract" Rock Ridge Continuation Entry.
+    These entries are strictly for keeping tabs of the offset and size
+    of each entry in a continuation block; they have no smarts beyond that.
+    '''
+    def __init__(self, offset, length):
+        self._offset = offset
+        self._length = length
+
+    @property
+    def offset(self):
+        '''
+        Property method to return the offset of this entry.
+
+        Parameters:
+         None.
+        Returns:
+         The offset of this entry.
+        '''
+        return self._offset
+
+    @property
+    def length(self):
+        '''
+        Property method to return the length of this entry.
+
+        Parameters:
+         None.
+        Returns:
+         The length of this entry.
+        '''
+        return self._length
+
+    def __lt__(self, other):
+        return self._offset < other.offset
+
+
+class RockRidgeContinuationBlock(object):
+    '''
+    A class representing one "abstract" Rock Ridge Continuation Block.
+    A Continuation Block is one extent holding many Rock Ridge Continuation
+    Entries.  However, this is just used for tracking how many entries will
+    fit in one block; all tracking of the actual data must be done elsewhere.
+    '''
+    def __init__(self, extent, max_block_size):
+        self._extent = extent
+        self._max_block_size = max_block_size
+        self._entries = []
+
+    def extent_location(self):
+        '''
+        A method to get the extent location that this block resides at.
+
+        Parameters:
+         None.
+        Returns:
+         The extent location that this block resides at.
+        '''
+        return self._extent
+
+    def set_extent_location(self, loc):
+        '''
+        A method to set the extent location that this block resides at.
+
+        Parameters:
+         loc - The new extent location.
+        Returns:
+         Nothing.
+        '''
+        self._extent = loc
+
+    def track_entry(self, offset, length):
+        '''
+        Track an already allocated entry in this Rock Ridge Continuation Block.
+
+        Parameters:
+         offset - The offset at which to place the entry.
+         length - The length of the entry to track.
+        Returns:
+         Nothing.
+        '''
+        newlen = offset + length - 1
+        for entry in self._entries:
+            thislen = entry.offset + entry.length - 1
+            overlap = range(max(entry.offset, offset), min(thislen, newlen) + 1)
+            if overlap:
+                raise pycdlibexception.PyCdlibInvalidISO("Overlapping CE regions on the ISO")
+
+        # OK, there were no overlaps with existing entries.  Let's see if
+        # the new entry fits at the end.
+        if offset + length > self._max_block_size:
+            raise pycdlibexception.PyCdlibInvalidISO("No room in continuation block to track entry")
+
+        # We passed all of the checks; add the new entry to track in.
+        bisect.insort_left(self._entries, RockRidgeContinuationEntry(offset, length))
+
+    def add_entry(self, length):
+        '''
+        Add a new entry to this Rock Ridge Continuation Block.  This method
+        attempts to find a gap that fits the new length anywhere within this
+        Continuation Block.  If successful, it returns the offset at which
+        it placed this entry.  If unsuccessful, it returns None.
+
+        Parameters:
+         length - The length of the entry to find a gap for.
+        Returns:
+         The offset the entry was placed at, or None if no gap was found.
+        '''
+        offset = None
+        # Need to find a gap
+        for index, entry in enumerate(self._entries):
+            if index == 0:
+                if entry.offset != 0 and length <= entry.offset:
+                    # We can put it at the beginning!
+                    print("At beginning")
+                    offset = 0
+                    break
+            else:
+                lastentry = self._entries[index - 1]
+                lastend = lastentry.offset + lastentry.length - 1
+                gapsize = entry.offset - lastend - 1
+                if gapsize >= length:
+                    # We found a spot for it!
+                    offset = lastend + 1
+                    break
         else:
-            if self.ce_record is not None:
-                if self.ce_record.continuation_entry.cl_record is not None:
-                    return self.ce_record.continuation_entry.cl_record.child_log_block_num
+            # We reached the end without finding a gap for it.  Look at the last
+            # entry and see if there is room at the end.
+            if self._entries:
+                lastentry = self._entries[-1]
+                lastend = lastentry.offset + lastentry.length - 1
+                left = self._max_block_size - lastend - 1
+                if left >= length:
+                    offset = lastend + 1
+            else:
+                if self._max_block_size >= length:
+                    offset = 0
 
-        raise pycdlibexception.PyCdlibException("This RR record has no child link record")
+        if offset is not None:
+            bisect.insort_left(self._entries, RockRidgeContinuationEntry(offset, length))
+
+        return offset
+
+    def remove_entry(self, offset, length):
+        '''
+        Given an offset and length, find and remove the entry in this block
+        that corresponds.
+
+        Parameters:
+         offset - The offset of the entry to look for.
+         length - The length of the entry to look for.
+        Returns:
+         Nothing.
+        '''
+        index = 0  # Just to fix a pylint warning
+        for index, entry in enumerate(self._entries):
+            if entry.offset == offset and entry.length == length:
+                break
+        else:
+            raise pycdlibexception.PyCdlibInternalError("Could not find an entry for the RR CE entry in the CE block!")
+
+        del self._entries[index]

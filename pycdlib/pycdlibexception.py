@@ -18,9 +18,34 @@
 The custom exception class for PyCdlib.
 '''
 
+
 class PyCdlibException(Exception):
     '''
     The custom Exception class for PyCdlib.
     '''
     def __init__(self, msg):
         Exception.__init__(self, msg)
+
+
+class PyCdlibInternalError(PyCdlibException):
+    '''
+    The Internal Error Exception class for PyCdlib.
+    '''
+    def __init__(self, msg):
+        PyCdlibException.__init__(self, msg)
+
+
+class PyCdlibInvalidInput(PyCdlibException):
+    '''
+    The Invalid User Input Exception class for PyCdlib.
+    '''
+    def __init__(self, msg):
+        PyCdlibException.__init__(self, msg)
+
+
+class PyCdlibInvalidISO(PyCdlibException):
+    '''
+    The Invalid ISO Exception class for PyCdlib.
+    '''
+    def __init__(self, msg):
+        PyCdlibException.__init__(self, msg)

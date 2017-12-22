@@ -1,4 +1,4 @@
-# Copyright (C) 2015-2016  Chris Lalancette <clalancette@gmail.com>
+# Copyright (C) 2015-2017  Chris Lalancette <clalancette@gmail.com>
 
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -25,6 +25,7 @@ import time
 
 import pycdlib.pycdlibexception as pycdlibexception
 
+
 def gmtoffset_from_tm(tm, local):
     '''
     A function to compute the GMT offset from the time in seconds since the epoch
@@ -48,6 +49,7 @@ def gmtoffset_from_tm(tm, local):
         if tmpyear > 0:
             tmpyday = 1
     return -(tmpmin + 60 * (tmphour + 24 * tmpyday)) // 15
+
 
 class InterfaceISODate(object):
     '''
@@ -92,6 +94,7 @@ class InterfaceISODate(object):
         '''
         raise NotImplementedError("New not yet implemented")
 
+
 class DirectoryRecordDate(InterfaceISODate):
     '''
     A class to represent a Directory Record date as described in Ecma-119
@@ -102,9 +105,10 @@ class DirectoryRecordDate(InterfaceISODate):
     fill in the fields (the parse() method), or to create a new entry with a
     tm structure (the new() method).
     '''
+    FMT = "=BBBBBBb"
+
     def __init__(self):
-        self.initialized = False
-        self.fmt = "=BBBBBBb"
+        self._initialized = False
 
     def parse(self, datestr):
         '''
@@ -115,14 +119,14 @@ class DirectoryRecordDate(InterfaceISODate):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("Directory Record Date already initialized")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Directory Record Date already initialized")
 
         (self.years_since_1900, self.month, self.day_of_month, self.hour,
          self.minute, self.second,
-         self.gmtoffset) = struct.unpack_from(self.fmt, datestr, 0)
+         self.gmtoffset) = struct.unpack_from(self.FMT, datestr, 0)
 
-        self.initialized = True
+        self._initialized = True
 
     def new(self, tm=None):
         '''
@@ -133,11 +137,11 @@ class DirectoryRecordDate(InterfaceISODate):
         Returns:
          Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("Directory Record Date already initialized")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Directory Record Date already initialized")
 
         if tm is not None:
-            raise pycdlibexception.PyCdlibException("Directory Record Date does not support passing tm in")
+            raise pycdlibexception.PyCdlibInternalError("Directory Record Date does not support passing tm in")
 
         # This algorithm was ported from cdrkit, genisoimage.c:iso9660_date()
         tm = time.time()
@@ -149,7 +153,7 @@ class DirectoryRecordDate(InterfaceISODate):
         self.minute = local.tm_min
         self.second = local.tm_sec
         self.gmtoffset = gmtoffset_from_tm(tm, local)
-        self.initialized = True
+        self._initialized = True
 
     def record(self):
         '''
@@ -160,15 +164,16 @@ class DirectoryRecordDate(InterfaceISODate):
         Returns:
          A string representing this Directory Record Date.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("Directory Record Date not initialized")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("Directory Record Date not initialized")
 
-        return struct.pack(self.fmt, self.years_since_1900, self.month,
+        return struct.pack(self.FMT, self.years_since_1900, self.month,
                            self.day_of_month, self.hour, self.minute,
                            self.second, self.gmtoffset)
 
     def __ne__(self, other):
         return self.years_since_1900 != other.years_since_1900 or self.month != other.month or self.day_of_month != other.day_of_month or self.hour != other.hour or self.minute != other.minute or self.second != other.second or self.gmtoffset != other.gmtoffset
+
 
 class VolumeDescriptorDate(InterfaceISODate):
     '''
@@ -181,10 +186,12 @@ class VolumeDescriptorDate(InterfaceISODate):
     string to fill in the fields (the parse() method), or to create a new entry
     with a tm structure (the new() method).
     '''
+
+    TIME_FMT = "%Y%m%d%H%M%S"
+    EMPTY_STRING = b'0' * 16 + b'\x00'
+
     def __init__(self):
-        self.initialized = False
-        self.time_fmt = "%Y%m%d%H%M%S"
-        self.empty_string = b'0'*16 + b'\x00'
+        self._initialized = False
 
     def parse(self, datestr):
         '''
@@ -196,13 +203,13 @@ class VolumeDescriptorDate(InterfaceISODate):
         Returns:
           Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("This Volume Descriptor Date object is already initialized")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("This Volume Descriptor Date object is already initialized")
 
         if len(datestr) != 17:
-            raise pycdlibexception.PyCdlibException("Invalid ISO9660 date string")
+            raise pycdlibexception.PyCdlibInvalidISO("Invalid ISO9660 date string")
 
-        if datestr == self.empty_string or datestr == b'\x00'*17 or datestr == b'0'*17:
+        if datestr == self.EMPTY_STRING or datestr == b'\x00' * 17 or datestr == b'0' * 17:
             # Ecma-119, 8.4.26.1 specifies that if the string was all the
             # digit zero, with the last byte 0, the time wasn't specified.
             # However, in practice I have found that some ISOs specify this
@@ -217,7 +224,7 @@ class VolumeDescriptorDate(InterfaceISODate):
             self.gmtoffset = 0
             self.present = False
         else:
-            timestruct = time.strptime(datestr[:-3].decode('utf-8'), self.time_fmt)
+            timestruct = time.strptime(datestr[:-3].decode('utf-8'), self.TIME_FMT)
             self.year = timestruct.tm_year
             self.month = timestruct.tm_mon
             self.dayofmonth = timestruct.tm_mday
@@ -228,7 +235,7 @@ class VolumeDescriptorDate(InterfaceISODate):
             self.gmtoffset, = struct.unpack_from("=b", datestr, 16)
             self.present = True
 
-        self.initialized = True
+        self._initialized = True
         self.date_str = datestr
 
     def record(self):
@@ -240,8 +247,8 @@ class VolumeDescriptorDate(InterfaceISODate):
         Returns:
           Date as a string.
         '''
-        if not self.initialized:
-            raise pycdlibexception.PyCdlibException("This Volume Descriptor Date is not yet initialized")
+        if not self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("This Volume Descriptor Date is not yet initialized")
 
         return self.date_str
 
@@ -259,8 +266,8 @@ class VolumeDescriptorDate(InterfaceISODate):
         Returns:
           Nothing.
         '''
-        if self.initialized:
-            raise pycdlibexception.PyCdlibException("This Volume Descriptor Date object is already initialized")
+        if self._initialized:
+            raise pycdlibexception.PyCdlibInternalError("This Volume Descriptor Date object is already initialized")
 
         if tm is not None:
             local = time.localtime(tm)
@@ -272,7 +279,7 @@ class VolumeDescriptorDate(InterfaceISODate):
             self.second = local.tm_sec
             self.hundredthsofsecond = 0
             self.gmtoffset = gmtoffset_from_tm(tm, local)
-            self.date_str = time.strftime(self.time_fmt, local).encode('utf-8') + "{:0<2}".format(self.hundredthsofsecond).encode('utf-8') + struct.pack("=b", self.gmtoffset)
+            self.date_str = time.strftime(self.TIME_FMT, local).encode('utf-8') + "{:0<2}".format(self.hundredthsofsecond).encode('utf-8') + struct.pack("=b", self.gmtoffset)
             self.present = True
         else:
             self.year = 0
@@ -283,10 +290,10 @@ class VolumeDescriptorDate(InterfaceISODate):
             self.second = 0
             self.hundredthsofsecond = 0
             self.gmtoffset = 0
-            self.date_str = self.empty_string
+            self.date_str = self.EMPTY_STRING
             self.present = False
 
-        self.initialized = True
+        self._initialized = True
 
     def __ne__(self, other):
         return self.year != other.year or self.month != other.month or self.dayofmonth != other.dayofmonth or self.hour != other.hour or self.minute != other.minute or self.second != other.second or self.hundredthsofsecond != other.hundredthsofsecond or self.gmtoffset != other.gmtoffset or self.date_str != other.date_str

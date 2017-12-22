@@ -3,7 +3,7 @@ from distutils.command.sdist import sdist as _sdist
 import subprocess
 import time
 
-VERSION='1.2.0'
+VERSION='1.4.0'
 RELEASE='0'
 
 class sdist(_sdist):
@@ -57,6 +57,6 @@ setuptools.setup(name='pycdlib',
                  requires=['pysendfile'],
                  package_data={'': ['examples/*.py']},
                  cmdclass={'sdist': sdist},
-                 data_files=[('share/man/man1', ['man/pycdlib-explorer.1', 'man/pycdlib-compare.1'])],
-                 scripts=['tools/pycdlib-compare', 'tools/pycdlib-explorer'],
+                 data_files=[('share/man/man1', ['man/pycdlib-compare.1', 'man/pycdlib-explorer.1', 'man/pycdlib-genisoimage.1'])],
+                 scripts=['tools/pycdlib-compare', 'tools/pycdlib-explorer', 'tools/pycdlib-genisoimage'],
 )

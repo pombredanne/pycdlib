@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pycdlib
 
-from common import *
+from test_common import *
 
 def do_a_test(tmpdir, iso, check_func):
     out = BytesIO()
@@ -1279,6 +1279,8 @@ def test_hybrid_isohybrid2(tmpdir):
 
     iso.close()
 
+@pytest.mark.skipif(find_executable('isohybrid') is None,
+                    reason="syslinux not installed")
 def test_hybrid_isohybrid3(tmpdir):
     # First set things up, and generate the ISO with genisoimage.
     indir = tmpdir.mkdir("isohybrid")
@@ -1767,6 +1769,53 @@ def test_hybrid_eltorito_multi_boot(tmpdir):
 
     iso.close()
 
+def test_hybrid_eltorito_multi_boot_boot_info(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("eltoritonofiles")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"boot\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "4", "-no-pad",
+                     "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
+                     "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    boot2str = b"boot2\n"
+    iso.add_fp(BytesIO(boot2str), len(boot2str), "/boot2")
+    iso.add_eltorito("/boot2", "/boot.cat", boot_info_table=True)
+
+    do_a_test(tmpdir, iso, check_eltorito_multi_boot)
+
+    iso.close()
+
+def test_hybrid_eltorito_multi_boot_hard_link(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("eltoritonofiles")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"boot\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "4", "-no-pad",
+                     "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
+                     "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    boot2str = b"boot2\n"
+    iso.add_fp(BytesIO(boot2str), len(boot2str), "/boot2")
+    iso.add_hard_link(iso_new_path="/bootlink", iso_old_path="/boot2")
+    iso.add_eltorito("/boot2", "/boot.cat")
+
+    do_a_test(tmpdir, iso, check_eltorito_multi_boot_hard_link)
+
+    iso.close()
+
 def test_hybrid_modify_in_place_onefile(tmpdir):
     # First set things up, and generate the ISO with genisoimage.
     indir = tmpdir.mkdir("modifyinplaceonefile")
@@ -1842,7 +1891,7 @@ def test_hybrid_try_to_use_new_on_open_file(tmpdir):
 
     iso.open(str(outfile))
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.new()
 
     iso.close()
@@ -1858,7 +1907,7 @@ def test_hybrid_try_to_use_open_on_new_file(tmpdir):
 
     iso = pycdlib.PyCdlib()
     iso.new()
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.open(str(outfile))
 
     iso.close()
@@ -1876,7 +1925,7 @@ def test_hybrid_modify_in_place_not_initialized(tmpdir):
     iso = pycdlib.PyCdlib()
 
     foostr = b"foo\n"
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.modify_file_in_place(BytesIO(foostr), len(foostr), "/FOO.;1", rr_name="foo", joliet_path="/foo")
 
 def test_hybrid_modify_in_place_read_only(tmpdir):
@@ -1895,7 +1944,7 @@ def test_hybrid_modify_in_place_read_only(tmpdir):
         iso.open_fp(fp)
 
         foostr = b"foo\n"
-        with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+        with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
             iso.modify_file_in_place(BytesIO(foostr), len(foostr), "/FOO.;1", rr_name="foo", joliet_path="/foo")
 
         iso.close()
@@ -1918,7 +1967,7 @@ def test_hybrid_add_isohybrid_file_wrong_size(tmpdir):
     with open(os.path.join(str(indir), 'file.bin'), 'wb') as outfp:
         outfp.write(b"file")
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.add_isohybrid(os.path.join(str(indir), 'file.bin'))
 
     iso.close()
@@ -1935,7 +1984,7 @@ def test_hybrid_add_isohybrid_no_eltorito(tmpdir):
 
     iso.open(str(outfile))
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.add_isohybrid('/usr/share/syslinux/isohdpfx.bin')
 
     iso.close()
@@ -1953,7 +2002,7 @@ def test_hybrid_eltorito_remove_not_initialized(tmpdir):
     # Now open up the ISO with pycdlib and check some things out.
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.rm_eltorito()
 
 def test_hybrid_eltorito_remove_not_present(tmpdir):
@@ -1970,7 +2019,7 @@ def test_hybrid_eltorito_remove_not_present(tmpdir):
 
     iso.open(str(outfile))
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.rm_eltorito()
 
     iso.close()
@@ -1988,7 +2037,7 @@ def test_hybrid_rmdir_not_initialized(tmpdir):
     # Now open up the ISO with pycdlib and check some things out.
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.rm_directory("/DIR1")
 
 def test_hybrid_rmdir_slash(tmpdir):
@@ -2006,7 +2055,7 @@ def test_hybrid_rmdir_slash(tmpdir):
 
     iso.open(str(outfile))
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.rm_directory("/")
 
     iso.close()
@@ -2026,7 +2075,7 @@ def test_hybrid_rmdir_not_dir(tmpdir):
 
     iso.open(str(outfile))
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.rm_directory("/FOO.;1")
 
     iso.close()
@@ -2048,7 +2097,7 @@ def test_hybrid_rmdir_not_empty(tmpdir):
 
     iso.open(str(outfile))
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.rm_directory("/DIR1")
 
     iso.close()
@@ -2065,7 +2114,7 @@ def test_hybrid_rmfile_not_initialized(tmpdir):
     # Now open up the ISO with pycdlib and check some things out.
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.rm_file("/BOOT.;1")
 
 def test_hybrid_rmfile_bad_filename(tmpdir):
@@ -2082,7 +2131,7 @@ def test_hybrid_rmfile_bad_filename(tmpdir):
 
     iso.open(str(outfile))
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.rm_file("BOOT.;1")
 
     iso.close()
@@ -2100,7 +2149,7 @@ def test_hybrid_rmfile_not_file(tmpdir):
 
     iso.open(str(outfile))
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.rm_file("/DIR1")
 
     iso.close()
@@ -2115,7 +2164,7 @@ def test_hybrid_add_directory_not_initialized(tmpdir):
     # Now open up the ISO with pycdlib and check some things out.
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.add_directory("/DIR1")
 
 def test_hybrid_addfile_not_initialized(tmpdir):
@@ -2129,7 +2178,7 @@ def test_hybrid_addfile_not_initialized(tmpdir):
     iso = pycdlib.PyCdlib()
 
     foostr = b"foo\n"
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1")
 
 def test_hybrid_modify_in_place_bad_path(tmpdir):
@@ -2147,7 +2196,7 @@ def test_hybrid_modify_in_place_bad_path(tmpdir):
     iso.open(str(outfile))
 
     foostr = b"foo\n"
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.modify_file_in_place(BytesIO(foostr), len(foostr), "foo", rr_name="foo", joliet_path="/foo")
 
     iso.close()
@@ -2167,7 +2216,7 @@ def test_hybrid_modify_in_place_grow_file(tmpdir):
     iso.open(str(outfile))
 
     foostr = b"f"*2049
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.modify_file_in_place(BytesIO(foostr), len(foostr), "/foo")
 
     iso.close()
@@ -2188,7 +2237,7 @@ def test_hybrid_modify_in_place_modify_dir(tmpdir):
     iso.open(str(outfile))
 
     foostr = b"foo\n"
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.modify_file_in_place(BytesIO(foostr), len(foostr), "/dir1")
 
     iso.close()
@@ -2349,8 +2398,8 @@ def test_hybrid_shuffle_deep(tmpdir):
 
     dir8_rr = rr_moved.children[2]
     assert(dir8_rr.file_identifier() == b"DIR8")
-    assert(dir8_rr.rock_ridge.rr_record is not None)
-    orig_pl = dir8_rr.children[1].rock_ridge.pl_record.parent_log_block_num
+    assert(dir8_rr.rock_ridge.dr_entries.rr_record is not None)
+    orig_pl = dir8_rr.children[1].rock_ridge.dr_entries.pl_record.parent_log_block_num
 
     dir2 = dir1.children[2]
     assert(dir2.file_identifier() == b"DIR2")
@@ -2373,15 +2422,349 @@ def test_hybrid_shuffle_deep(tmpdir):
     dir8 = dir7.children[2]
     assert(dir8.file_identifier() == b"DIR8")
 
-    assert(dir8.rock_ridge.cl_record is not None)
-    orig_cl = dir8.rock_ridge.cl_record.child_log_block_num
+    assert(dir8.rock_ridge.dr_entries.cl_record is not None)
+    orig_cl = dir8.rock_ridge.dr_entries.cl_record.child_log_block_num
 
     iso.add_directory("/A", rr_name="a")
 
-    new_cl = dir8.rock_ridge.cl_record.child_log_block_num
+    iso.force_consistency()
+
+    new_cl = dir8.rock_ridge.dr_entries.cl_record.child_log_block_num
     assert(orig_cl != new_cl)
 
-    new_pl = dir8_rr.children[1].rock_ridge.pl_record.parent_log_block_num
+    new_pl = dir8_rr.children[1].rock_ridge.dr_entries.pl_record.parent_log_block_num
     assert(orig_pl != new_pl)
 
     iso.close()
+
+def test_hybrid_hidden_file(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("onefile")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "aaaaaaaa"), 'wb') as outfp:
+        outfp.write(b"aa\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+    iso.set_hidden("/AAAAAAAA.;1")
+
+    do_a_test(tmpdir, iso, check_hidden_file)
+
+    iso.close()
+
+def test_hybrid_hidden_dir(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("onefile")
+    outfile = str(indir)+".iso"
+    indir.mkdir("dir1")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    iso.set_hidden("/DIR1")
+
+    do_a_test(tmpdir, iso, check_hidden_dir)
+
+    iso.close()
+
+def test_hybrid_clear_hidden_file(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("onefile")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
+        outfp.write(b"foo\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-hidden", "foo", "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+    iso.clear_hidden("/FOO.;1")
+
+    do_a_test(tmpdir, iso, check_onefile)
+
+    iso.close()
+
+def test_hybrid_clear_hidden_dir(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("onefile")
+    outfile = str(indir)+".iso"
+    indir.mkdir("dir1")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-hidden", "dir1", "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    iso.clear_hidden("/DIR1")
+
+    do_a_test(tmpdir, iso, check_onedir)
+
+    iso.close()
+
+@pytest.mark.skipif(find_executable('isohybrid') is None,
+                    reason="syslinux not installed")
+def test_hybrid_isohybrid_file_before(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("isohybrid")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "isolinux.bin"), 'wb') as outfp:
+        outfp.seek(0x40)
+        outfp.write(b'\xfb\xc0\x78\x70')
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "boot.cat", "-b", "isolinux.bin", "-no-emul-boot",
+                     "-boot-load-size", "4",
+                     "-o", str(outfile), str(indir)])
+    subprocess.call(["isohybrid", "-v", str(outfile)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/FOO.;1")
+
+    do_a_test(tmpdir, iso, check_isohybrid_file_before)
+
+    iso.close()
+
+def test_hybrid_joliet_dirs_ptr_extent(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("jolietmanydirs")
+    outfile = str(indir)+".iso"
+    numdirs = 214
+    for i in range(1, 1+numdirs):
+        indir.mkdir("dir%d" % i)
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-J", "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    iso.add_directory("/DIR215", joliet_path="/dir215")
+    iso.add_directory("/DIR216", joliet_path="/dir216")
+
+    do_a_test(tmpdir, iso, check_joliet_dirs_overflow_ptr_extent)
+
+    iso.close()
+
+def test_hybrid_joliet_dirs_ptr_extent2(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("jolietmanydirs")
+    outfile = str(indir)+".iso"
+    numdirs = 216
+    for i in range(1, 1+numdirs):
+        indir.mkdir("dir%d" % i)
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-J", "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    iso.rm_directory("/DIR216", joliet_path="/dir216")
+
+    do_a_test(tmpdir, iso, check_joliet_dirs_just_short_ptr_extent)
+
+    iso.close()
+
+def test_hybrid_joliet_dirs_add_ptr_extent(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("dirsaddptrextent")
+    outfile = str(indir)+".iso"
+    numdirs = 293
+    for i in range(1, 1+numdirs):
+        indir.mkdir("dir%d" % i)
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-J", "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    iso.add_directory("/DIR294", joliet_path="/dir294")
+    iso.add_directory("/DIR295", joliet_path="/dir295")
+
+    do_a_test(tmpdir, iso, check_joliet_dirs_add_ptr_extent)
+
+    iso.close()
+
+def test_hybrid_joliet_dirs_rm_ptr_extent(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("dirsrmptrextent")
+    outfile = str(indir)+".iso"
+    numdirs = 295
+    for i in range(1, 1+numdirs):
+        indir.mkdir("dir%d" % i)
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-J", "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    iso.rm_directory("/DIR294", joliet_path="/dir294")
+    iso.rm_directory("/DIR295", joliet_path="/dir295")
+
+    do_a_test(tmpdir, iso, check_joliet_dirs_rm_ptr_extent)
+
+    iso.close()
+
+def test_hybrid_joliet_rm_large_directory(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("dirsrmptrextent")
+    outfile = str(indir)+".iso"
+    numdirs = 50
+    for i in range(1, 1+numdirs):
+        indir.mkdir("dir%d" % i)
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-J", "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    for i in range(1, 1+numdirs):
+        iso.rm_directory("/DIR%d" % i, joliet_path="/dir%d" % i)
+
+    do_a_test(tmpdir, iso, check_joliet_nofiles)
+
+    iso.close()
+
+def test_hybrid_set_relocated_name_not_initialized(tmpdir):
+    iso = pycdlib.PyCdlib()
+
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
+        iso.set_relocated_name('RR_MOVED', 'rr_moved')
+
+def test_hybrid_set_relocated_not_rockridge(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("setrelocatednotrr")
+    outfile = str(indir)+".iso"
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
+        iso.set_relocated_name('RR_MOVED', 'rr_moved')
+
+    iso.close()
+
+def test_hybrid_set_relocated_change_name(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("setrelocatednotrr")
+    outfile = str(indir)+".iso"
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-rational-rock", "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    iso.set_relocated_name('RR_MOVED', 'rr_moved')
+
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
+        iso.set_relocated_name('XX_MOVED', 'xx_moved')
+
+    iso.close()
+
+def test_hybrid_set_relocated_same_name(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("setrelocatednotrr")
+    outfile = str(indir)+".iso"
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-rational-rock", "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    iso.set_relocated_name('RR_MOVED', 'rr_moved')
+
+    iso.set_relocated_name('RR_MOVED', 'rr_moved')
+
+    iso.close()
+
+def test_hybrid_rr_hidden_relocated(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("setrelocatednotrr")
+    outfile = str(indir)+".iso"
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-rational-rock", "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    iso.set_relocated_name('_RR_MOVE', '.rr_moved')
+
+    iso.add_directory('/DIR1', rr_name='dir1')
+    iso.add_directory('/DIR1/DIR2', rr_name='dir2')
+    iso.add_directory('/DIR1/DIR2/DIR3', rr_name='dir3')
+    iso.add_directory('/DIR1/DIR2/DIR3/DIR4', rr_name='dir4')
+    iso.add_directory('/DIR1/DIR2/DIR3/DIR4/DIR5', rr_name='dir5')
+    iso.add_directory('/DIR1/DIR2/DIR3/DIR4/DIR5/DIR6', rr_name='dir6')
+    iso.add_directory('/DIR1/DIR2/DIR3/DIR4/DIR5/DIR6/DIR7', rr_name='dir7')
+    iso.add_directory('/DIR1/DIR2/DIR3/DIR4/DIR5/DIR6/DIR7/DIR8', rr_name='dir8')
+    iso.add_directory('/DIR1/DIR2/DIR3/DIR4/DIR5/DIR6/DIR7/DIR8/DIR9', rr_name='dir9')
+
+    foostr = b"foo\n"
+    iso.add_fp(BytesIO(foostr), len(foostr), "/DIR1/DIR2/DIR3/DIR4/DIR5/DIR6/DIR7/DIR8/DIR9/FOO.;1", "foo")
+
+    do_a_test(tmpdir, iso, check_rr_relocated_hidden)
+
+    iso.close()
+
+def test_hybrid_rr_relocated_list_dir(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("rrdeeplistdir")
+    outfile = str(indir)+".iso"
+    indir.mkdir('dir1').mkdir('dir2').mkdir('dir3').mkdir('dir4').mkdir('dir5').mkdir('dir6').mkdir('dir7').mkdir('dir8').mkdir('dir9')
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-rational-rock", "-o", str(outfile), str(indir)])
+
+    iso = pycdlib.PyCdlib()
+    iso.open(str(outfile))
+
+    for index, child in enumerate(iso.list_dir("/dir1/dir2/dir3/dir4/dir5/dir6/dir7")):
+        if index == 0:
+            assert(child.is_dot())
+        elif index == 1:
+            assert(child.is_dotdot())
+        elif index == 2:
+            assert(child.file_identifier() == b"DIR8")
+            assert(child.rock_ridge.name() == b"dir8")
+            for index, child in enumerate(iso.list_dir("/dir1/dir2/dir3/dir4/dir5/dir6/dir7/dir8")):
+                if index == 0:
+                    assert(child.is_dot())
+                elif index == 1:
+                    assert(child.is_dotdot())
+                    assert(child.rock_ridge.parent_link_record_exists())
+
+        else:
+            assert(False)

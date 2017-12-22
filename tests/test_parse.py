@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pycdlib
 
-from common import *
+from test_common import *
 
 def do_a_test(tmpdir, outfile, check_func):
     testout = tmpdir.join("writetest.iso")
@@ -585,6 +585,8 @@ def test_parse_joliet_and_eltorito_onedir(tmpdir):
 
     do_a_test(tmpdir, outfile, check_joliet_and_eltorito_onedir)
 
+@pytest.mark.skipif(find_executable('isohybrid') is None,
+                    reason="syslinux not installed")
 def test_parse_isohybrid(tmpdir):
     # First set things up, and generate the ISO with genisoimage.
     indir = tmpdir.mkdir("isohybrid")
@@ -600,6 +602,8 @@ def test_parse_isohybrid(tmpdir):
 
     do_a_test(tmpdir, outfile, check_isohybrid)
 
+@pytest.mark.skipif(find_executable('isohybrid') is None,
+                    reason="syslinux not installed")
 def test_parse_isohybrid_mac_uefi(tmpdir):
     # First set things up, and generate the ISO with genisoimage.
     indir = tmpdir.mkdir("isohybridmacuefi")
@@ -611,12 +615,17 @@ def test_parse_isohybrid_mac_uefi(tmpdir):
         outfp.write(b'a')
     with open(os.path.join(str(indir), "macboot.img"), 'wb') as outfp:
         outfp.write(b'b')
-    subprocess.call(["genisoimage", "-v", "-v", "-no-pad",
-                     "-c", "boot.cat", "-b", "isolinux.bin", "-no-emul-boot",
-                     "-boot-load-size", "4", "-boot-info-table",
-                     "-eltorito-alt-boot", "-e", "efiboot.img", "-no-emul-boot",
-                     "-eltorito-alt-boot", "-e", "macboot.img", "-no-emul-boot",
-                     "-o", str(outfile), str(indir)])
+    retcode = subprocess.call(["genisoimage", "-v", "-v", "-no-pad",
+                               "-c", "boot.cat", "-b", "isolinux.bin",
+                               "-no-emul-boot", "-boot-load-size", "4",
+                               "-boot-info-table", "-eltorito-alt-boot",
+                               "-efi-boot", "efiboot.img", "-no-emul-boot",
+                               "-eltorito-alt-boot", "-efi-boot", "macboot.img",
+                               "-no-emul-boot",
+                               "-o", str(outfile), str(indir)])
+    if retcode != 0:
+        pytest.skip("This version of genisoimage doesn't support -efi-boot")
+
     subprocess.call(["isohybrid", "-u", "-m", "-v", str(outfile)])
 
     do_a_test(tmpdir, outfile, check_isohybrid_mac_uefi)
@@ -951,7 +960,7 @@ def test_parse_open_twice(tmpdir):
     iso = pycdlib.PyCdlib()
     iso.open(str(outfile))
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.open(str(outfile))
 
     iso.close()
@@ -967,7 +976,7 @@ def test_parse_get_and_write_fp_not_initialized(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.get_and_write_fp('/FOO.;1', open(os.path.join(str(tmpdir), 'bar'), 'w'))
 
 def test_parse_get_and_write_not_initialized(tmpdir):
@@ -981,7 +990,7 @@ def test_parse_get_and_write_not_initialized(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.get_and_write('/FOO.;1', 'foo')
 
 def test_parse_write_not_initialized(tmpdir):
@@ -995,7 +1004,7 @@ def test_parse_write_not_initialized(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         iso.write('out.iso')
 
 def test_parse_write_with_progress(tmpdir):
@@ -1021,8 +1030,35 @@ def test_parse_write_with_progress(tmpdir):
     iso.open(str(outfile))
     iso.write(str(tmpdir.join("writetest.iso")), progress_cb=_progress)
 
-    assert(test_parse_write_with_progress.num_progress_calls == 16)
+    assert(test_parse_write_with_progress.num_progress_calls == 14)
     assert(test_parse_write_with_progress.done == 73728)
+
+    iso.close()
+
+def test_parse_write_with_progress_three_arg(tmpdir):
+    def _progress(done, total, opaque):
+        assert(total == 73728)
+        opaque['num_calls'] += 1
+        opaque['done'] = done
+
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("modifyinplaceisolevel4onefile")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
+        outfp.write(b"f\n")
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"boot\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "4", "-no-pad",
+                     "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
+                     "-rational-rock", "-J", "-o", str(outfile), str(indir)])
+
+    iso = pycdlib.PyCdlib()
+    iso.open(str(outfile))
+    collect = {'num_calls': 0, 'done': 0}
+    iso.write(str(tmpdir.join("writetest.iso")), progress_cb=_progress, progress_opaque=collect)
+
+    assert(collect['num_calls'] == 14)
+    assert(collect['done'] == 73728)
 
     iso.close()
 
@@ -1063,7 +1099,7 @@ def test_parse_get_entry_not_initialized(tmpdir):
     # Now open up the ISO with pycdlib and check some things out.
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         fooentry = iso.get_entry("/FOO.;1")
 
 def test_parse_list_dir(tmpdir):
@@ -1098,7 +1134,7 @@ def test_parse_list_dir_not_initialized(tmpdir):
     # Now open up the ISO with pycdlib and check some things out.
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         for children in iso.list_dir("/DIR1"):
             pass
 
@@ -1116,7 +1152,7 @@ def test_parse_list_dir_not_dir(tmpdir):
 
     iso.open(str(outfile))
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         for children in iso.list_dir("/FOO.;1"):
             pass
 
@@ -1151,7 +1187,7 @@ def test_parse_open_fp_twice(tmpdir):
 
     iso.open(str(outfile))
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
         with open(str(outfile), 'rb') as infp:
             iso.open_fp(infp)
 
@@ -1172,7 +1208,7 @@ def test_parse_open_invalid_vd(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_same_dirname_different_parent(tmpdir):
@@ -1280,7 +1316,7 @@ def test_parse_open_invalid_pvd_ident(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_open_invalid_pvd_version(tmpdir):
@@ -1298,7 +1334,7 @@ def test_parse_open_invalid_pvd_version(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_open_invalid_pvd_unused1(tmpdir):
@@ -1316,7 +1352,7 @@ def test_parse_open_invalid_pvd_unused1(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_open_invalid_pvd_unused2(tmpdir):
@@ -1334,7 +1370,7 @@ def test_parse_open_invalid_pvd_unused2(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_open_invalid_pvd_unused3(tmpdir):
@@ -1352,7 +1388,7 @@ def test_parse_open_invalid_pvd_unused3(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_open_invalid_pvd_file_structure_version(tmpdir):
@@ -1370,7 +1406,7 @@ def test_parse_open_invalid_pvd_file_structure_version(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_open_invalid_pvd_unused4(tmpdir):
@@ -1388,7 +1424,7 @@ def test_parse_open_invalid_pvd_unused4(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_open_invalid_pvd_unused5(tmpdir):
@@ -1426,7 +1462,7 @@ def test_parse_invalid_pvd_space_size_le_be_mismatch(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_invalid_pvd_set_size_le_be_mismatch(tmpdir):
@@ -1444,7 +1480,7 @@ def test_parse_invalid_pvd_set_size_le_be_mismatch(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_invalid_pvd_seqnum_le_be_mismatch(tmpdir):
@@ -1462,7 +1498,7 @@ def test_parse_invalid_pvd_seqnum_le_be_mismatch(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_invalid_pvd_lb_le_be_mismatch(tmpdir):
@@ -1480,7 +1516,7 @@ def test_parse_invalid_pvd_lb_le_be_mismatch(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_invalid_pvd_ptr_size_le_be_mismatch(tmpdir):
@@ -1498,7 +1534,7 @@ def test_parse_invalid_pvd_ptr_size_le_be_mismatch(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_open_invalid_vdst_ident(tmpdir):
@@ -1516,7 +1552,7 @@ def test_parse_open_invalid_vdst_ident(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_open_invalid_vdst_version(tmpdir):
@@ -1534,7 +1570,7 @@ def test_parse_open_invalid_vdst_version(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_invalid_br_ident(tmpdir):
@@ -1555,7 +1591,7 @@ def test_parse_invalid_br_ident(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_invalid_br_version(tmpdir):
@@ -1576,7 +1612,7 @@ def test_parse_invalid_br_version(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_open_invalid_svd_ident(tmpdir):
@@ -1594,7 +1630,7 @@ def test_parse_open_invalid_svd_ident(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_open_invalid_svd_version(tmpdir):
@@ -1612,7 +1648,7 @@ def test_parse_open_invalid_svd_version(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_open_invalid_svd_unused1(tmpdir):
@@ -1630,7 +1666,7 @@ def test_parse_open_invalid_svd_unused1(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_open_invalid_svd_file_structure_version(tmpdir):
@@ -1648,7 +1684,7 @@ def test_parse_open_invalid_svd_file_structure_version(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_open_invalid_svd_unused2(tmpdir):
@@ -1666,7 +1702,7 @@ def test_parse_open_invalid_svd_unused2(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_open_invalid_svd_unused3(tmpdir):
@@ -1684,7 +1720,7 @@ def test_parse_open_invalid_svd_unused3(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_invalid_svd_space_size_le_be_mismatch(tmpdir):
@@ -1702,7 +1738,7 @@ def test_parse_invalid_svd_space_size_le_be_mismatch(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_invalid_svd_set_size_le_be_mismatch(tmpdir):
@@ -1720,7 +1756,7 @@ def test_parse_invalid_svd_set_size_le_be_mismatch(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_invalid_svd_seqnum_le_be_mismatch(tmpdir):
@@ -1738,7 +1774,7 @@ def test_parse_invalid_svd_seqnum_le_be_mismatch(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_invalid_svd_lb_le_be_mismatch(tmpdir):
@@ -1756,7 +1792,7 @@ def test_parse_invalid_svd_lb_le_be_mismatch(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_invalid_svd_ptr_size_le_be_mismatch(tmpdir):
@@ -1774,7 +1810,7 @@ def test_parse_invalid_svd_ptr_size_le_be_mismatch(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_iso_too_small(tmpdir):
@@ -1785,7 +1821,7 @@ def test_parse_iso_too_small(tmpdir):
 
     iso = pycdlib.PyCdlib()
 
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_rr_deeper_dir(tmpdir):
@@ -1846,7 +1882,7 @@ def test_parse_dirrecord_too_short(tmpdir):
         os.ftruncate(editfp.fileno(), 47104)
 
     iso = pycdlib.PyCdlib()
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_eltorito_hide_boot(tmpdir):
@@ -1879,7 +1915,7 @@ def test_parse_no_pvd(tmpdir):
         outfp.write(b'\xff'+b'CD001'+b'\x01'+b'\x00'*2041)
 
     iso = pycdlib.PyCdlib()
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_dirrecord_overflow(tmpdir):
@@ -1897,7 +1933,7 @@ def test_parse_dirrecord_overflow(tmpdir):
         outfp.write(b'\xff')
 
     iso = pycdlib.PyCdlib()
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
 
 def test_parse_get_entry_joliet(tmpdir):
@@ -1940,5 +1976,573 @@ def test_parse_dirrecord_nonzero_pad(tmpdir):
         changefp.write(b'\xff')
 
     iso = pycdlib.PyCdlib()
-    with pytest.raises(pycdlib.pycdlibexception.PyCdlibException):
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
         iso.open(str(outfile))
+
+def test_parse_open_invalid_eltorito_header_id(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("modifyinplaceisolevel4onefile")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"boot\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
+                     "-o", str(outfile), str(indir)])
+
+    # Now that we've made a valid ISO, we open it up and perturb the El Torito
+    # header ID (extent 25).  This should be enough to make an invalid ISO.
+    with open(str(outfile), 'r+b') as fp:
+        fp.seek(25*2048 + 0)
+        fp.write(b'\xF4')
+
+    iso = pycdlib.PyCdlib()
+
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
+        iso.open(str(outfile))
+
+def test_parse_open_invalid_eltorito_platform_id(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("modifyinplaceisolevel4onefile")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"boot\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
+                     "-o", str(outfile), str(indir)])
+
+    # Now that we've made a valid ISO, we open it up and perturb the El Torito
+    # header ID (extent 25).  This should be enough to make an invalid ISO.
+    with open(str(outfile), 'r+b') as fp:
+        fp.seek(25*2048 + 1)
+        fp.write(b'\xF4')
+
+    iso = pycdlib.PyCdlib()
+
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
+        iso.open(str(outfile))
+
+def test_parse_open_invalid_eltorito_first_key_byte(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("modifyinplaceisolevel4onefile")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"boot\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
+                     "-o", str(outfile), str(indir)])
+
+    # Now that we've made a valid ISO, we open it up and perturb the El Torito
+    # header ID (extent 25).  This should be enough to make an invalid ISO.
+    with open(str(outfile), 'r+b') as fp:
+        fp.seek(25*2048 + 0x1e)
+        fp.write(b'\xF4')
+
+    iso = pycdlib.PyCdlib()
+
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
+        iso.open(str(outfile))
+
+def test_parse_open_invalid_eltorito_second_key_byte(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("modifyinplaceisolevel4onefile")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"boot\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
+                     "-o", str(outfile), str(indir)])
+
+    # Now that we've made a valid ISO, we open it up and perturb the El Torito
+    # header ID (extent 25).  This should be enough to make an invalid ISO.
+    with open(str(outfile), 'r+b') as fp:
+        fp.seek(25*2048 + 0x1f)
+        fp.write(b'\xF4')
+
+    iso = pycdlib.PyCdlib()
+
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
+        iso.open(str(outfile))
+
+def test_parse_open_invalid_eltorito_csum(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("modifyinplaceisolevel4onefile")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"boot\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
+                     "-o", str(outfile), str(indir)])
+
+    # Now that we've made a valid ISO, we open it up and perturb the El Torito
+    # header ID (extent 25).  This should be enough to make an invalid ISO.
+    with open(str(outfile), 'r+b') as fp:
+        fp.seek(25*2048 + 0x1c)
+        fp.write(b'\x00')
+        fp.write(b'\x00')
+
+    iso = pycdlib.PyCdlib()
+
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
+        iso.open(str(outfile))
+
+def test_parse_hidden_file(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("onefile")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "aaaaaaaa"), 'wb') as outfp:
+        outfp.write(b"aa\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-hidden", "aaaaaaaa", "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_hidden_file)
+
+def test_parse_hidden_dir(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("onedir")
+    outfile = str(indir)+".iso"
+    indir.mkdir("dir1")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-hidden", "dir1", "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_hidden_dir)
+
+def test_parse_eltorito_bad_boot_indicator(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("eltoritonofiles")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"boot\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
+                     "-o", str(outfile), str(indir)])
+
+    # Now that we have the ISO, perturb the initial entry
+    with open(str(outfile), 'r+b') as fp:
+        fp.seek(25*2048+32)
+        fp.write(b'\xF4')
+
+    iso = pycdlib.PyCdlib()
+
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
+        iso.open(str(outfile))
+
+def test_parse_eltorito_bad_boot_media(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("eltoritonofiles")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"boot\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
+                     "-o", str(outfile), str(indir)])
+
+    # Now that we have the ISO, perturb the initial entry
+    with open(str(outfile), 'r+b') as fp:
+        fp.seek(25*2048+33)
+        fp.write(b'\xF4')
+
+    iso = pycdlib.PyCdlib()
+
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
+        iso.open(str(outfile))
+
+def test_parse_eltorito_bad_unused(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("eltoritonofiles")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"boot\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
+                     "-o", str(outfile), str(indir)])
+
+    # Now that we have the ISO, perturb the initial entry
+    with open(str(outfile), 'r+b') as fp:
+        fp.seek(25*2048+37)
+        fp.write(b'\xF4')
+
+    iso = pycdlib.PyCdlib()
+
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
+        iso.open(str(outfile))
+
+def test_parse_eltorito_hd_emul(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("eltoritonofiles")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"\x00"*446 + b"\x00\x01\x01\x00\x02\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00" + b"\x00"*16 + b"\x00"*16 + b"\x00"*16 + b'\x55' + b'\xaa')
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "boot.cat", "-b", "boot", "-hard-disk-boot",
+                     "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_eltorito_hd_emul)
+
+def test_parse_eltorito_hd_emul_not_bootable(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("eltoritonofiles")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"\x00"*446 + b"\x00\x01\x01\x00\x02\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00" + b"\x00"*16 + b"\x00"*16 + b"\x00"*16 + b'\x55' + b'\xaa')
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "boot.cat", "-b", "boot", "-hard-disk-boot", "-no-boot",
+                     "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_eltorito_hd_emul_not_bootable)
+
+def test_parse_eltorito_floppy12(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("eltoritonofiles")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"\x00"*(2400*512))
+    # If you don't pass -hard-disk-boot or -no-emul-boot to genisoimage,
+    # it assumes floppy.
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "boot.cat", "-b", "boot",
+                     "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_eltorito_floppy12)
+
+def test_parse_eltorito_floppy144(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("eltoritonofiles")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"\x00"*(2880*512))
+    # If you don't pass -hard-disk-boot or -no-emul-boot to genisoimage,
+    # it assumes floppy.
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "boot.cat", "-b", "boot",
+                     "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_eltorito_floppy144)
+
+def test_parse_eltorito_floppy288(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("eltoritonofiles")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"\x00"*(5760*512))
+    # If you don't pass -hard-disk-boot or -no-emul-boot to genisoimage,
+    # it assumes floppy.
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "boot.cat", "-b", "boot",
+                     "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_eltorito_floppy288)
+
+def test_parse_ptr_le_and_be_disagree(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("eltoritonofiles")
+    outfile = str(indir)+".iso"
+    subprocess.call(["genisoimage", "-v", "-iso-level", "1", "-no-pad",
+                     "-o", str(outfile), str(indir)])
+
+    # Now that we've made a valid ISO, we open it up and perturb the first
+    # byte of the Big Endian PTR.  This should make open_fp() fail.
+    with open(str(outfile), 'r+b') as fp:
+        fp.seek(21*2048)
+        fp.write(b'\xF4')
+
+    iso = pycdlib.PyCdlib()
+
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
+        iso.open(str(outfile))
+
+def test_parse_joliet_ptr_le_and_be_disagree(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("eltoritonofiles")
+    outfile = str(indir)+".iso"
+    subprocess.call(["genisoimage", "-v", "-iso-level", "1", "-no-pad", "-J",
+                     "-o", str(outfile), str(indir)])
+
+    # Now that we've made a valid ISO, we open it up and perturb the first
+    # byte of the Joliet Big Endian PTR.  This should make open_fp() fail.
+    with open(str(outfile), 'r+b') as fp:
+        fp.seek(24*2048)
+        fp.write(b'\xF4')
+
+    iso = pycdlib.PyCdlib()
+
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidISO):
+        iso.open(str(outfile))
+
+def test_parse_add_file_with_semicolon(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("onefile")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "FOO;1"), 'wb') as outfp:
+        outfp.write(b"foo\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-relaxed-filenames", "-o", str(outfile), str(indir)])
+
+    # Now open up the ISO with pycdlib and check some things out.
+    iso = pycdlib.PyCdlib()
+
+    iso.open(str(outfile))
+
+    do_a_test(tmpdir, outfile, check_onefile_with_semicolon)
+
+    iso.close()
+
+def test_parse_bad_eltorito_ident(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("eltoritonofiles")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"boot\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "boot.cat", "-b", "boot", "-no-emul-boot",
+                     "-o", str(outfile), str(indir)])
+
+    with open(str(outfile), 'r+') as outfp:
+        # Change the EL TORITO SPECIFICATION string to be something else
+        outfp.seek(17*2048+7)
+        outfp.write("Z")
+
+    do_a_test(tmpdir, outfile, check_bad_eltorito_ident)
+
+def test_parse_duplicate_rrmoved_name(tmpdir):
+    iso = pycdlib.PyCdlib()
+    iso.new(rock_ridge="1.09")
+
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("eltoritonofiles")
+    outfile = str(indir)+".iso"
+    fdir = indir.mkdir('A').mkdir('B').mkdir('C').mkdir('D').mkdir('E').mkdir('F')
+    fdir.mkdir('G').mkdir('1')
+    fdir.mkdir('H').mkdir('1')
+    with open(os.path.join(str(indir), "A", "B", "C", "D", "E", "F", "G", "1", "first"), 'wb') as outfp:
+        outfp.write(b"first\n")
+    with open(os.path.join(str(indir), "A", "B", "C", "D", "E", "F", "H", "1", "second"), 'wb') as outfp:
+        outfp.write(b"second\n")
+
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-rational-rock", "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_rr_two_dirs_same_level)
+
+def test_parse_eltorito_rr_verylongname(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("rrverylongname")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"boot\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "a"*RR_MAX_FILENAME_LENGTH, "-b", "boot", "-no-emul-boot",
+                     "-rational-rock", "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_eltorito_rr_verylongname)
+
+@pytest.mark.skipif(find_executable('isohybrid') is None,
+                    reason="syslinux not installed")
+def test_parse_isohybrid_file_before(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("isohybrid")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "isolinux.bin"), 'wb') as outfp:
+        outfp.seek(0x40)
+        outfp.write(b'\xfb\xc0\x78\x70')
+    with open(os.path.join(str(indir), "foo"), "wb") as outfp:
+        outfp.write(b'foo\n')
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "boot.cat", "-b", "isolinux.bin", "-no-emul-boot",
+                     "-boot-load-size", "4",
+                     "-o", str(outfile), str(indir)])
+    subprocess.call(["isohybrid", "-v", str(outfile)])
+
+    do_a_test(tmpdir, outfile, check_isohybrid_file_before)
+
+def test_parse_eltorito_rr_joliet_verylongname(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("rrjolietverylongname")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "boot"), 'wb') as outfp:
+        outfp.write(b"boot\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-c", "a"*RR_MAX_FILENAME_LENGTH, "-b", "boot", "-no-emul-boot",
+                     "-rational-rock", "-J", "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_eltorito_rr_joliet_verylongname)
+
+def test_parse_joliet_dirs_overflow_ptr_extent(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("jolietmanydirs")
+    outfile = str(indir)+".iso"
+    numdirs = 216
+    for i in range(1, 1+numdirs):
+        indir.mkdir("dir%d" % i)
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-J", "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_joliet_dirs_overflow_ptr_extent)
+
+def test_parse_joliet_dirs_just_short_ptr_extent(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("jolietjustshortdirs")
+    outfile = str(indir)+".iso"
+    numdirs = 215
+    for i in range(1, 1+numdirs):
+        indir.mkdir("dir%d" % i)
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-J", "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_joliet_dirs_just_short_ptr_extent)
+
+def test_parse_joliet_dirs_add_ptr_extent(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("jolietjustshortdirs")
+    outfile = str(indir)+".iso"
+    numdirs = 295
+    for i in range(1, 1+numdirs):
+        indir.mkdir("dir%d" % i)
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-J", "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_joliet_dirs_add_ptr_extent)
+
+def test_parse_joliet_dirs_rm_ptr_extent(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("jolietjustshortdirs")
+    outfile = str(indir)+".iso"
+    numdirs = 293
+    for i in range(1, 1+numdirs):
+        indir.mkdir("dir%d" % i)
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-J", "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_joliet_dirs_rm_ptr_extent)
+
+def test_parse_long_directory_name(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("longdirectoryname")
+    outfile = str(indir)+".iso"
+    indir.mkdir("directory1")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "3", "-no-pad",
+                     "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_long_directory_name)
+
+def test_parse_long_file_name(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("longdirectoryname")
+    outfile = str(indir)+".iso"
+    with open(os.path.join(str(indir), "foobarbaz1"), 'wb') as outfp:
+        outfp.write(b"foobarbaz1\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "3", "-no-pad",
+                     "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_long_file_name)
+
+def test_parse_overflow_root_dir_record(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("overflowrootdirrecord")
+    outfile = str(indir)+".iso"
+    for letter in ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k', 'l', 'm', 'n', 'o']:
+        with open(os.path.join(str(indir), letter*20), 'wb') as outfp:
+            outfp.write(b"\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-rational-rock", "-J", "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_overflow_root_dir_record)
+
+def test_parse_duplicate_deep_dir(tmpdir):
+    indir = tmpdir.mkdir("duplicatedeepdir")
+    outfile = str(indir)+".iso"
+
+    get = indir.mkdir("books").mkdir("lkhg").mkdir("HyperNews").mkdir("get")
+    get.mkdir("fs").mkdir("fs").mkdir("1")
+    khg = get.mkdir("khg")
+    khg.mkdir("1")
+    khg.mkdir("117").mkdir("1").mkdir("1").mkdir("1").mkdir("1")
+    khg.mkdir("35").mkdir("1").mkdir("1")
+
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-rational-rock", "-J", "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_duplicate_deep_dir)
+
+def test_parse_no_joliet_name(tmpdir):
+    indir = tmpdir.mkdir("nojolietname")
+    outfile = str(indir)+".iso"
+
+    with open(os.path.join(str(indir), "foo"), 'wb') as outfp:
+        outfp.write(b"foo\n")
+
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-J", "-hide-joliet", "foo", "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_onefile_joliet_no_file)
+
+def test_parse_joliet_isolevel4_nofiles(tmpdir):
+    indir = tmpdir.mkdir("jolietisolevel4nofiles")
+    outfile = str(indir)+".iso"
+
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "4", "-no-pad",
+                     "-J", "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_joliet_isolevel4_nofiles)
+
+def test_parse_deep_rr_symlink(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("sevendeepdirs")
+    outfile = str(indir)+".iso"
+    dir7 = indir.mkdir('dir1').mkdir('dir2').mkdir('dir3').mkdir('dir4').mkdir('dir5').mkdir('dir6').mkdir('dir7')
+    pwd = os.getcwd()
+    os.chdir(str(dir7))
+    os.symlink("/usr/share/foo", "sym")
+    os.chdir(pwd)
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-rational-rock", "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_deep_rr_symlink)
+
+def test_parse_rr_deep_weird_layout(tmpdir):
+    indir = tmpdir.mkdir("rrdeepweird")
+    outfile = str(indir) + ".iso"
+    absimp = indir.mkdir('astroid').mkdir('astroid').mkdir('tests').mkdir('testdata').mkdir('python3').mkdir('data').mkdir('absimp')
+    sidepackage = absimp.mkdir('sidepackage')
+    with open(os.path.join(str(absimp), "string.py"), 'wb') as outfp:
+        outfp.write(b"from __future__ import absolute_import, print_functino\nimport string\nprint(string)\n")
+    with open(os.path.join(str(sidepackage), "__init__.py"), 'wb') as outfp:
+        outfp.write(b'"""a side package with nothing in it\n"""\n')
+
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-rational-rock", "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_rr_deep_weird_layout)
+
+def test_parse_rr_long_dir_name(tmpdir):
+    indir = tmpdir.mkdir("rrlongdirname")
+    outfile = str(indir) + ".iso"
+    indir.mkdir("a"*RR_MAX_FILENAME_LENGTH)
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-rational-rock", "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_rr_long_dir_name)
+
+def test_parse_rr_hidden_relocated(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("rrdeep")
+    outfile = str(indir)+".iso"
+    indir.mkdir('dir1').mkdir('dir2').mkdir('dir3').mkdir('dir4').mkdir('dir5').mkdir('dir6').mkdir('dir7').mkdir('dir8').mkdir('dir9')
+    with open(os.path.join(str(indir), 'dir1', 'dir2', 'dir3', 'dir4', 'dir5', 'dir6', 'dir7', 'dir8', 'dir9', 'foo'), 'wb') as outfp:
+        outfp.write(b"foo\n")
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-rational-rock", "-hide-rr-moved", "-o", str(outfile), str(indir)])
+
+    do_a_test(tmpdir, outfile, check_rr_relocated_hidden)
+
+def test_parse_open_fp_not_binary(tmpdir):
+    # First set things up, and generate the ISO with genisoimage.
+    indir = tmpdir.mkdir("rrdeep")
+    outfile = str(indir)+".iso"
+    subprocess.call(["genisoimage", "-v", "-v", "-iso-level", "1", "-no-pad",
+                     "-o", str(outfile), str(indir)])
+
+    iso = pycdlib.PyCdlib()
+
+    with pytest.raises(pycdlib.pycdlibexception.PyCdlibInvalidInput):
+        with open(str(outfile), 'r') as infp:
+            iso.open_fp(infp)
